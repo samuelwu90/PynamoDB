@@ -20,6 +20,9 @@ class Key(object):
         self.key = key
         self.node_hash  = node_hash
 
+    def __hash__(self):
+        return self.key.__hash__()
+
 class Value(object):
     """ A simple object for adding aditional properties to values """
 
