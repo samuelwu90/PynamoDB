@@ -7,6 +7,9 @@ class PersistenceStage(object):
     def __init__(self):
         self._persistence_engine = PersistenceEngine()
 
+    def keys(self):
+        return self._persistence_engine.keys()
+
     def put(self, key, value):
         """ Returns:
                 error code \x00 if put is successful

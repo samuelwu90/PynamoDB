@@ -9,7 +9,10 @@ class PersistenceEngine(object):
     """ Basic persistence engine implemented as a regular Python dict."""
 
     def __init__(self):
-        self._persistence = {}
+        self._persistence = dict()
+
+    def keys():
+        return self._persistence.keys()
 
     def put(self, key, value):
         """ Put key value pair into storage"""
