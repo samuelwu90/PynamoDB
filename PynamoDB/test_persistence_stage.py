@@ -9,7 +9,6 @@
 
 import unittest
 from persistence_stage import PersistenceStage
-from error_code import ErrorCode
 import util
 
 
@@ -18,7 +17,7 @@ class TestSequenceFunctions(unittest.TestCase):
     def setUp(self):
         self.ps = PersistenceStage()
         self.key = "key"
-        self.value = util.TimestampedValue("value")
+        self.value = util.Value("value")
 
     def tearDown(self):
         pass
@@ -27,24 +26,24 @@ class TestSequenceFunctions(unittest.TestCase):
         """ Tests put command """
         try:
             error_code = self.ps.put(self.key, self.value)
-            self.assertEqual(error_code, ErrorCode('\x00'))
+            self.assertEqual(error_code, util.ErrorCode('\x00'))
         except:
             self.fail()
 
     def test_put_new_value(self):
         """ Tests put command """
         try:
-            old_value = util.TimestampedValue("new_value")
-            new_value = util.TimestampedValue("new_value")
+            old_value = util.Value("new_value")
+            new_value = util.Value("new_value")
 
             error_code = self.ps.put(self.key, old_value)
-            self.assertEqual(error_code, ErrorCode('\x00'))
+            self.assertEqual(error_code, util.ErrorCode('\x00'))
             error_code = self.ps.put(self.key, new_value)
-            self.assertEqual(error_code, ErrorCode('\x00'))
+            self.assertEqual(error_code, util.ErrorCode('\x00'))
 
             error_code, value = self.ps.get(self.key)
             self.assertEqual(value, new_value)
-            self.assertEqual(error_code, ErrorCode('\x00'))
+            self.assertEqual(error_code, util.ErrorCode('\x00'))
         except:
             self.fail()
 
@@ -52,7 +51,7 @@ class TestSequenceFunctions(unittest.TestCase):
         """ Tests put command """
         try:
             error_code = self.ps.put(self.key, self.value)
-            self.assertEqual(error_code, ErrorCode('\x00'))
+            self.assertEqual(error_code, util.ErrorCode('\x00'))
         except:
             self.fail()
 
@@ -62,7 +61,7 @@ class TestSequenceFunctions(unittest.TestCase):
             self.ps.put(self.key, self.value)
             error_code, value = self.ps.get(self.key)
             self.assertEqual(value, self.value)
-            self.assertEqual(error_code, ErrorCode('\x00'))
+            self.assertEqual(error_code, util.ErrorCode('\x00'))
         except:
             self.fail()
 
@@ -72,7 +71,7 @@ class TestSequenceFunctions(unittest.TestCase):
             self.ps.get(self.key)
             error_code, value = self.ps.get(self.key)
             self.assertEqual(value, None)
-            self.assertEqual(error_code, ErrorCode('\x01'))
+            self.assertEqual(error_code, util.ErrorCode('\x01'))
         except:
             self.fail()
 
@@ -82,7 +81,7 @@ class TestSequenceFunctions(unittest.TestCase):
             self.ps.put(self.key, self.value)
             error_code = self.ps.delete(self.key)
             error_code, value = self.ps.get(self.key)
-            self.assertEqual(error_code, ErrorCode('\x01'))
+            self.assertEqual(error_code, util.ErrorCode('\x01'))
         except:
             self.fail()
 
@@ -90,7 +89,7 @@ class TestSequenceFunctions(unittest.TestCase):
         """ Tests delete command on inexistant key"""
         try:
             error_code = self.ps.delete(self.key)
-            self.assertEqual(error_code, ErrorCode('\x01'))
+            self.assertEqual(error_code, util.ErrorCode('\x01'))
         except:
             self.fail()
 

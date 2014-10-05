@@ -1,4 +1,4 @@
-from error_code import ErrorCode
+from util import ErrorCode
 from persistence_engine import PersistenceEngine
 
 class PersistenceStage(object):

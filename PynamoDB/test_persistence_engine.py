@@ -8,6 +8,7 @@
 """
 
 import unittest
+import util
 from persistence_engine import PersistenceEngine
 
 
@@ -15,8 +16,8 @@ class TestSequenceFunctions(unittest.TestCase):
 
     def setUp(self):
         self.p = PersistenceEngine()
-        self.key = "key"
-        self.value = "value"
+        self.key = util.Key(key="key")
+        self.value = util.Value(value="value")
 
     def tearDown(self):
         pass
