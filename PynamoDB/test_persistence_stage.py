@@ -16,7 +16,7 @@ class TestSequenceFunctions(unittest.TestCase):
 
     def setUp(self):
         self.ps = PersistenceStage()
-        self.key = "key"
+        self.key = util.Key("key")
         self.value = util.Value("value")
 
     def tearDown(self):
