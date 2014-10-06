@@ -7,6 +7,8 @@
 import hashlib
 from datetime import datetime
 
+def get_hash(value):
+    return hashlib.sha256(value).hexdigest()
 
 # Classes
 
