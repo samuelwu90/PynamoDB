@@ -8,7 +8,10 @@ class ConsistentHashRing(object):
     """
 
     def __init__(self, node_hashes=None):
-        self._hash_ring = sorted(node_hashes)
+        if node_hashes:
+            self._hash_ring = sorted(node_hashes)
+        else:
+            self._hash_ring = []
 
     def __len__(self):
         """ Returns the number of nodes still in hash ring"""
@@ -17,11 +20,11 @@ class ConsistentHashRing(object):
 
     def add_node_hash(self, node_hash=None):
         if node_hash:
-            self._node_hash.insort(self._hash_ring, node_hash)
+            bisect.insort(self._hash_ring, node_hash)
 
     def remove_node_hash(self, node_hash=None):
         if node_hash:
-            self._node_hash.remove(node_hash)
+            self._hash_ring.remove(node_hash)
 
     def get_responsible_node_hashes(self, key_hash=None, num_replicas=3):
         """ Returns:
