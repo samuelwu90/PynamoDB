@@ -1,6 +1,10 @@
-class ExternalRequestStage(object):
+import asynchat
+import asyncore
+import logging
+import util
+import socket
+import json
 
-    def __init__(self, server):
 class ExternalRequestStage(asyncore.dispatcher):
     """ Listens for external connections from clients and creates an ExternalChannel upon accepting."""
 
@@ -101,4 +105,49 @@ class ExternalChannel(asynchat.async_chat):
                 self._request_queue.pop(0)
             else:
                 break
+
+class ExternalRequest(object):
+    """ enables requests to be processed in order."""
+
+    def __init__(self, request=None, server=None):
+        self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
+        self.logger.debug('__init__')
+
+        self._server = server
+        self._reply = None
+
+        self._processor = self._handle_request(request)
+
+    @property
+    def completed(self):
+        return bool(self._reply)
+
+    @property
+    def reply(self):
+        return self._reply
+
+    def process(self):
+        return self._processor.next()
+
+    @util.coroutine
+    def _handle_request(self, request):
+        self.logger.info('_handle_request')
+        self.logger.debug('_handle_request.  request: {}'.format(request))
+
+        reply_listener = self._reply_listener()
+        self._server.internal_request_stage.handle_internal_request(request, reply_listener)
+        self.logger.info('_handle_request')
+        while True:
+            yield self.completed
+
+    @util.coroutine
+    def _reply_listener(self):
+        self.logger.info('_reply_listener')
+        self._reply = (yield)
+        self.logger.debug('_reply_listener.  reply received: {}'.format(self._reply))
+        yield True
+
+
+
+
 
