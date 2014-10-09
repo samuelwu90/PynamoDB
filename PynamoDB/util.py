@@ -12,8 +12,8 @@ def get_hash(value):
 
 # Classes
 
-def get_timestamp():
-    return datetime.utcnow()
+def current_time():
+    return datetime.datetime.utcnow()
 
 class Key(object):
     """ A simple object for adding aditional properties to keys """
