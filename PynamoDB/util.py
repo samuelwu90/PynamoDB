@@ -27,6 +27,12 @@ def pack_message(message, terminator):
     """ packs message for transport through asynchat channel"""
     return json.dumps(message) + terminator
 
+def coroutine(func):
+    def start(*args,**kwargs):
+        cr = func(*args,**kwargs)
+        cr.next()
+        return cr
+    return start
 
 class ErrorCode(object):
     """ Object for passing around error codes from put/get/delete commands"""
