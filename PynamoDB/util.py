@@ -17,6 +17,11 @@ def current_time():
 
 
 
+def offset_hex(hex_string, offset=1):
+    """ Returns hex string offset by the given amount.
+        Useful for generating keys for which a given node_hash is reponsible, i.e. offset the node's hash by a negative amount
+    """
+    return '{:x}'.format(int(hex_string, 16) + offset)
 
 
 
