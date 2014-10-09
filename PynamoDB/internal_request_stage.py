@@ -85,6 +85,7 @@ class InternalChannel(asynchat.async_chat):
 
     def found_terminator(self):
         message = json.loads(''.join(self._read_buffer))
+        self._read_buffer = []
         self._process_incoming_message(message)
         self.close_when_done()
 
@@ -137,7 +138,7 @@ class InternalRequestCoordinator(object):
         self._reply_listener = reply_listener
 
         # for communications
-        self._reply = None
+        self._complete = False
         self._replies = dict()
         self._channels = list()
 
@@ -149,8 +150,6 @@ class InternalRequestCoordinator(object):
         #listener and processor
         self._coordinator_listener = self._listener()
         self._processor = self._handle_request(request=request, reply_listener=reply_listener)
-
-
 
     def process(self):
         """ returns:
@@ -165,12 +164,13 @@ class InternalRequestCoordinator(object):
 
     @property
     def complete(self):
-        return self._reply
+        return self._complete
 
     @util.coroutine
     def _handle_request(self, request, reply_listener):
         self.logger.debug('_handle_request')
 
+        # only get commands have for internal values to return
         if request['command'] in ['put', 'delete', 'shutdown']:
             reply = {'error_code' : '\x00'}
             reply_listener.send(reply)
@@ -233,8 +233,8 @@ class InternalRequestCoordinator(object):
 
         for _ in xrange(self._server.num_replicas):
             reply = (yield)
-            self.logger.debug('_listener. reply received: {}'.format(reply))
             self._replies[reply['node_hash']] = reply
+            self.logger.debug('_listener. reply received: {}'.format(reply))
 
         self._process_replies()
 
@@ -242,7 +242,7 @@ class InternalRequestCoordinator(object):
             yield True
 
     def _process_replies(self):
-        """ Process n replies.
+        """ Process replies when listener has received
                 If the request is get, return the most recent value and perform repairs if necessary.
         """
 
@@ -259,3 +259,5 @@ class InternalRequestCoordinator(object):
         else:
             reply = self._replies.values()[0]
             self.logger.debug('_process_replies.  reply: {}'.format(reply))
+
+        self._complete = True

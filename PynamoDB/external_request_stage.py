@@ -65,7 +65,7 @@ class ExternalChannel(asynchat.async_chat):
         self._server = server
         self._read_buffer = list()
         self._request_queue = list()
-
+        self._timeout = None
 
         self.set_terminator(self._server.terminator)
 
@@ -75,36 +75,55 @@ class ExternalChannel(asynchat.async_chat):
 
     def found_terminator(self):
         request = json.loads(''.join(self._read_buffer))
+        self._read_buffer = []
         self._handle_request(request)
 
         self.logger.debug('found_terminator.  request: {}'.format(request))
 
     def _send_message(self, message):
+        self.logger.info('_send_message.')
+        self.logger.info('_send_message.  message {}'.format(message))
         self.push(util.pack_message(message, self._server._terminator))
 
     def _handle_request(self, request):
-        self.logger.debug('_handle_request.')
+        self.logger.info('_handle_request.')
         request['timestamp'] = util.current_time()
         request['key'] = util.get_hash(request['key'])
         external_request = ExternalRequest(request=request, server=self._server)
         self._request_queue.append(external_request)
+
+        # set timeout to be 30 seconds after last request received
+        self._timeout = util.add_time(util.current_time(), 30)
+
     def handle_error(self):
         pass
 
     def process(self):
-        self.logger.info('process')
-        if not self._request_queue:
-            self.handle_close()
+        """ Processes request queue and returns replies in the correct order"""
 
+        # if timeout has been set and it's past the time
+        if self._timeout and (util.current_time() > self._timeout):
+            self.close_when_done()
+            pass
+
+        # process requests
         for external_request in self._request_queue:
             external_request.process()
 
-        for external_request in self._request_queue:
+        # send replies if ready
+        for index, external_request in enumerate(self._request_queue):
             if external_request.completed:
                 self._send_message(external_request._reply)
-                self._request_queue.pop(0)
             else:
                 break
+
+        # pop sent replies
+        try:
+            for _ in xrange(index+1):
+                self._request_queue.pop(0)
+        except:
+            pass
+
 
 class ExternalRequest(object):
     """ enables requests to be processed in order."""

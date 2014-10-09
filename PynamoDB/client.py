@@ -5,11 +5,6 @@ import json
 import util
 import logging
 
-logging.basicConfig(filename='pynamo.log',
-                    level=logging.DEBUG,
-                    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
-                    )
-
 class PynamoClient(asynchat.async_chat):
 
     def __init__(self, host, port):
@@ -34,6 +29,14 @@ class PynamoClient(asynchat.async_chat):
         except:
             print "Refused"
 
+    @property
+    def requests(self):
+        return self._requests
+
+    @property
+    def replies(self):
+        return self._replies
+
     def _immediate_shutdown(self):
         self.logger.info('_immediate_shutdown')
         self.handle_when_done()
@@ -45,39 +48,52 @@ class PynamoClient(asynchat.async_chat):
 
     def put(self, key, value):
         self.logger.info('put')
-        message = dict()
-        message['command'] = 'put'
-        message['key'] = key
-        message['value'] = value
+        message = {
+            'command' : 'put',
+            'key' : key,
+            'value' : value
+        }
+        self._requests.append(message)
         self.send_message(message)
 
     def get(self, key, value):
         self.logger.info('get')
         message = dict()
-        message['command'] = 'get'
-        message['key'] = key
+        message = {
+            'command' : 'put',
+            'key' : key
+        }
+        self._requests.append(message)
         self.send_message(message)
 
     def delete(self, key, value):
         self.logger.info('delete')
         message = dict()
-        message['command'] = 'delete'
-        message['key'] = key
+        message = {
+            'command' : 'delete',
+            'key' : key
+        }
+        self._requests.append(message)
         self.send_message(message)
 
     def shutdown(self, key, value):
         self.logger.info('shutdown')
         message = dict()
-        message['command'] = 'shutdown'
+        message = {
+            'command' : 'shutdown'
+        }
+        self._requests.append(message)
         self.send_message(message)
 
     def collect_incoming_data(self, data):
         self.logger.info('collect_incoming_data')
+        self.logger.debug('collect_incoming_data.  data: {}'.format(data))
         self._read_buffer.append(data)
 
     def found_terminator(self):
         self.logger.info('found_terminator')
         reply = json.loads(''.join(self._read_buffer))
+        self._read_buffer = []
         self._handle_reply(reply)
 
     def _handle_reply(self, reply):
