@@ -4,13 +4,10 @@
     contains utility functions.
 """
 
+import json
 import hashlib
-from datetime import datetime
+import datetime
 
-def get_hash(value):
-    return hashlib.sha256(value).hexdigest()
-
-# Classes
 
 def current_time():
     return datetime.datetime.utcnow()
