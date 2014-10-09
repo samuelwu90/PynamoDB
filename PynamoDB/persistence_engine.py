@@ -14,14 +14,16 @@ class PersistenceEngine(object):
     def keys():
         return self._persistence.keys()
 
-    def put(self, key, value):
+    def put(self, key, value, timestamp):
         """ Put key value pair into storage"""
-        self._persistence[key] = value
+        self._persistence[key] = {'value': value, 'timestamp': timestamp}
+        return True
 
     def get(self, key):
         """ Get key's value """
-        return self._persistence[key]
+        return self._persistence[key]['value'], self._persistence[key]['timestamp']
 
     def delete(self, key):
         """ Delete key value pair """
         del self._persistence[key]
+        return True
