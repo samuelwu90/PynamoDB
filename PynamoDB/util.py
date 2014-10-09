@@ -15,25 +15,10 @@ def get_hash(value):
 def current_time():
     return datetime.datetime.utcnow()
 
-class Key(object):
-    """ A simple object for adding aditional properties to keys """
 
-    def __init__(self, key=None, node_hash=None):
-        self.key = key
-        self.node_hash  = node_hash
 
-    def __hash__(self):
-        return self.key.__hash__()
 
-class Value(object):
-    """ A simple object for adding aditional properties to values """
 
-    def __init__(self, value=None, timestamp=None):
-        self.value = value
-        if not timestamp:
-            self.timestamp = get_timestamp()
-        else:
-            self.timestamp = timestamp
 
 class ErrorCode(object):
     """ Object for passing around error codes from put/get/delete commands"""
