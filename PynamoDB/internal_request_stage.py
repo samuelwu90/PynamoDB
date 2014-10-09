@@ -1,6 +1,10 @@
-class InternalRequestStage(object):
+import asynchat
+import asyncore
+import logging
+import util
+import json
+import socket
 
-    def __init__(self, server):
 class InternalRequestStage(asyncore.dispatcher):
     """ Listens for external connections from other nodes and creates an InternalChannel upon accepting."""
 
