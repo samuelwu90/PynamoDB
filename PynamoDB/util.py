@@ -15,6 +15,9 @@ def get_hash(value):
 def current_time():
     return datetime.datetime.utcnow()
 
+def add_time(timestamp, seconds):
+    previous_timestamp = datetime.datetime.strptime(str(timestamp), "%Y-%m-%d %H:%M:%S.%f")
+    return previous_timestamp + datetime.timedelta(seconds=seconds)
 
 
 def offset_hex(hex_string, offset=1):
