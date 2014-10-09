@@ -123,3 +123,135 @@ class InternalChannel(asynchat.async_chat):
     def handle_error(self):
         self.logger.error('handle_error')
 
+class InternalRequestCoordinator(object):
+    def __init__(self, server=None, request=None, reply_listener=None, timeout=1, max_retries=3):
+        self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
+        self.logger.debug('__init__')
+
+        self._server = server
+        self._request = request
+        self._reply_listener = reply_listener
+
+        # for communications
+        self._reply = None
+        self._replies = dict()
+        self._channels = list()
+
+        # for timeouts
+        self._timeout = util.add_time(util.current_time(), timeout)
+        self._retries = dict()
+        self._max_retries = max_retries
+
+        #listener and processor
+        self._coordinator_listener = self._listener()
+        self._processor = self._handle_request(request=request, reply_listener=reply_listener)
+
+
+
+    def process(self):
+        """ returns:
+                True if completed
+                False if still handling
+        """
+        return self._processor.next()
+
+    @property
+    def timed_out(self):
+        return util.current_time() > self._timeout
+
+    @property
+    def complete(self):
+        return self._reply
+
+    @util.coroutine
+    def _handle_request(self, request, reply_listener):
+        self.logger.debug('_handle_request')
+
+        if request['command'] in ['put', 'delete', 'shutdown']:
+            reply = {'error_code' : '\x00'}
+            reply_listener.send(reply)
+
+        responsible_node_hashes = self._server.membership_stage.get_responsible_node_hashes(request['key'], num_replicas=self._server.num_replicas)
+        self.logger.debug('_handle_request.  key, node_hashes: {}, {}'.format(request['key'], responsible_node_hashes))
+
+        for node_hash in responsible_node_hashes:
+            self._replies[node_hash] = None
+            self._retries[node_hash] = 0
+
+            if node_hash == self._server.node_hash:
+                self._handle_request_locally(request)
+            else:
+                self._handle_request_remotely(request)
+
+        while True:
+            if self.timed_out and not self.complete:
+                self._handle_timeout()
+            else:
+                yield self.complete
+
+    def _handle_request_locally(self, request):
+        self.logger.debug('_handle_request_locally')
+        if request['command'] == 'put':
+            reply = self._server.persistence_stage.put(request['key'], request['value'], request['timestamp'])
+        elif request['command'] == 'get':
+            reply = self._server.persistence_stage.put(request['key'], request['value'])
+        elif request['command'] == 'delete':
+            reply = self._server.persistence_stage.put(request['key'], request['value'])
+
+        self.logger.debug('_handle_request_locally.  sending reply: {}'.format(reply))
+        self._coordinator_listener.send(reply)
+
+    def _handle_request_remotely(self, request, node_hash):
+        self.logger.debug('_handle_request_remotely')
+        try:
+            internal_channel = self.InternalChannel(coordinator_listener=self._coordinator_listener)
+            internal_channel._send_message(request)
+            self._channels.append(internal_channel)
+        except:
+            pass
+
+    def _handle_timeout(self):
+        """  Retries requests up to _max_num_tries, then considers
+        """
+        for node_hash, reply in self._replies:
+            if not reply:
+                if ( self._retries[node_hash] < self._max_retries ):
+                    self._retries[node_hash] += 1
+                    self._handle_request_remotely(self._request, node_hash)
+                else:
+                    self._server._handle_unannounced_failure(node_hash)
+            else:
+                self._coordinator_listener.send(reply)
+
+    @util.coroutine
+    def _listener(self):
+        self.logger.debug('_listener')
+
+        for _ in xrange(self._server.num_replicas):
+            reply = (yield)
+            self.logger.debug('_listener. reply received: {}'.format(reply))
+            self._replies[reply['node_hash']] = reply
+
+        self._process_replies()
+
+        while True:
+            yield True
+
+    def _process_replies(self):
+        """ Process n replies.
+                If the request is get, return the most recent value and perform repairs if necessary.
+        """
+
+        self.logger.debug('_process_replies')
+
+        if self._request['command'] == 'get':
+            replies = self._replies.values().sort(self._replies, key=lambda reply: reply['timestamp'])
+            newest_reply = replies[0]
+            self._reply_listener.send(newest_reply)
+
+            for node_hash, reply in self._replies:
+                if reply['value'] != newest_value:
+                    pass # repair at read
+        else:
+            reply = self._replies.values()[0]
+            self.logger.debug('_process_replies.  reply: {}'.format(reply))
