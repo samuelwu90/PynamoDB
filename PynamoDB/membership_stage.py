@@ -1,37 +1,37 @@
 from consistent_hash_ring import ConsistentHashRing
-from error_code import ErrorCode
+import logging
 import util
-
-
-def get_hash(value):
-    return hashlib.sha256(value).hexdigest()
+import collections
 
 class MembershipStage(object):
-    """ Stage for managing membership."""
+    """ Stage for managing ring membeship and failure detection."""
 
-    @classmethod
-    def from_node_list(cls, file_name, **kwargs):
-        node_addresses = []
-        with open(file_name) as f:
-            for line in f:
-                node_addresses.append(line.strip())
-        return cls(**kwargs, node_addresses=node_addresses)
+    def __init__(self, server = None,  node_addresses=[]):
+        self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
+        self.logger.debug('__init__')
 
-    def __init__(self, server = None, node_addresses=[]):
         self._server = server
-        self._internal_request_stage = internal_request_stage
-        self._node_lookup = {get_hash(node_address) : node_hash for node_address in node_addresses}
-        self._consistent_hash_ring = ConsistentHashRing()
+        self._node_lookup = {util.get_hash(str(node_address)) : node_address for node_address in node_addresses}
+        self._consistent_hash_ring = ConsistentHashRing(node_hashes = self._node_lookup.keys())
 
-    def get_node_address(self, node_hash=None):
-        """ Returns the IP address of a node identified by its hash value in the node ring."""
+        self.logger.debug('__init__.  node_lookup: {}'.format(self._node_lookup))
+
+    def node_address(self, node_hash=None):
+        """ Returns the  address of a node identified by its hash value in the node ring."""
         if node_hash:
             return self._node_lookup[node_hash]
 
-    def partition_keyspace(self):
-        """ Returns:
-                a dict() where:
-                    keys: node_hashes
-                    values: keys for which the given node_hash is responsible
-        """
+    def get_responsible_node_hashes(self, *args, **kwargs):
+        self.logger.debug('get_responsible_node_hashes')
+        return self._consistent_hash_ring.get_responsible_node_hashes(*args, **kwargs)
+
+
+    def _handle_announced_failure(self):
+        """ Called when instructed to shut down.  """
+
+    def _handle_unannounced_failure(self):
+        """ Called when unannounced failure of another node is detected."""
+
+
+    def process(self):
         pass
