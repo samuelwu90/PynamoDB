@@ -23,6 +23,9 @@ def offset_hex(hex_string, offset=1):
     """
     return '{:x}'.format(int(hex_string, 16) + offset)
 
+def pack_message(message, terminator):
+    """ packs message for transport through asynchat channel"""
+    return json.dumps(message) + terminator
 
 
 class ErrorCode(object):
