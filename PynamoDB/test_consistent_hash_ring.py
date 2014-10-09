@@ -40,7 +40,6 @@ class TestSequenceFunctions(unittest.TestCase):
     def test_get_responsible_node_hashes(self):
         node_hashes = ['A', 'B', 'C', 'D', 'E', 'F']
         self.consistent_hash_ring = consistent_hash_ring.ConsistentHashRing(node_hashes)
-
         responsible_node_hashes =  self.consistent_hash_ring.get_responsible_node_hashes('AA', 3)
         self.assertEqual(responsible_node_hashes, ['B', 'C', 'D'])
 
@@ -48,6 +47,5 @@ class TestSequenceFunctions(unittest.TestCase):
         """ Make sure that the list returns wraps around properly, i.e. 'E, F, A' or 'F, A, B'... """
         node_hashes = ['A', 'B', 'C', 'D', 'E', 'F']
         self.consistent_hash_ring = consistent_hash_ring.ConsistentHashRing(node_hashes)
-
         responsible_node_hashes =  self.consistent_hash_ring.get_responsible_node_hashes('EE', 3)
         self.assertEqual(responsible_node_hashes, ['F', 'A', 'B'])
