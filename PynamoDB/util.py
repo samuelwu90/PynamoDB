@@ -19,6 +19,9 @@ def add_time(timestamp, seconds):
     previous_timestamp = datetime.datetime.strptime(str(timestamp), "%Y-%m-%d %H:%M:%S.%f")
     return previous_timestamp + datetime.timedelta(seconds=seconds)
 
+def get_hash(value):
+    """ Return a 32-byte hash of value as a hex string"""
+    return hashlib.sha256(value).hexdigest()
 
 def offset_hex(hex_string, offset=1):
     """ Returns hex string offset by the given amount.
