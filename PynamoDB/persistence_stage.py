@@ -38,30 +38,29 @@ class PersistenceStage(object):
 
         self.logger.debug('put')
 
-        reply = {
+        reply = {   'type': 'reply',
                         'node_hash' : self._server.node_hash,
                         'error_code' : None
                         }
+
+        if not timestamp:
+            new_timestamp = util.current_time()
+        else:
+            new_timestamp = timestamp
         try:
-            if not timestamp:
-                new_timestamp = util.get_timestamp()
-            else:
-                new_timestamp = timestamp
-            try:
-                old_timestamp = self._persistence_engine.get(key)['timestamp']
-            except KeyError:
+            old_timestamp = self._persistence_engine.get(key)['timestamp']
+        except KeyError:
+            self._persistence_engine.put(key, value, new_timestamp)
+            reply['error_code'] = '\x00'
+        except:
+            reply['error_code'] = '\x06'
+        else:
+            if new_timestamp > old_timestamp:
                 self._persistence_engine.put(key, value, new_timestamp)
                 reply['error_code'] = '\x00'
-            except:
-                reply['error_code'] = '\x06'
-            else:
-                if new_timestamp > old_timestamp:
-                    self._persistence_engine.put(key, value, new_timestamp)
-                    reply['error_code'] = '\x00'
-            finally:
-                return reply
-        except Exception as e:
-            print e, sys.exc_info()
+        finally:
+            return reply
+
 
     def get(self, key):
         """ Returns:
@@ -72,7 +71,7 @@ class PersistenceStage(object):
 
         self.logger.debug('get')
 
-        reply = {
+        reply = {   'type': 'reply',
                         'node_hash' : self._server.node_hash,
                         'error_code' :  None,
                         'value' : None,
@@ -80,7 +79,7 @@ class PersistenceStage(object):
                         }
 
         try:
-            value, timestamp = self._persistence_engine.get(key)
+            reply['value'], reply['timestamp'] = self._persistence_engine.get(key)
         except KeyError:
             reply['error_code'] = '\x01'
         except:
@@ -99,7 +98,7 @@ class PersistenceStage(object):
 
         self.logger.debug('delete')
 
-        reply = {
+        reply = {   'type': 'reply',
                         'node_hash' : self._server.node_hash,
                         'error_code' : None
                         }

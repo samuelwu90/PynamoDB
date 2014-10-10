@@ -8,7 +8,7 @@ import json
 class ExternalRequestStage(asyncore.dispatcher):
     """ Listens for external connections from clients and creates an ExternalChannel upon accepting."""
 
-    def __init__(self, server, hostname, external_port):
+    def __init__(self, server=None, hostname=None, external_port=None):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.debug('__init__')
 
@@ -24,6 +24,7 @@ class ExternalRequestStage(asyncore.dispatcher):
         self._hostname = hostname
         self._external_port = external_port
         self._channels = []
+        self._coordinators = []
 
         self.logger.debug('__init__.  Binding to {}:{}'.format(hostname, external_port))
 
@@ -34,22 +35,19 @@ class ExternalRequestStage(asyncore.dispatcher):
             sock, client_address = self.accept()
             external_channel = ExternalChannel(server=self._server, sock=sock)
             self._channels.append(external_channel)
-
             self.logger.debug('handle_accept.  accepting connection from: {}'.format(client_address))
-
 
     def handle_close(self):
         self.logger.debug('handle_close')
         for channel in self._channels:
             channel.close_when_done()
         self.close()
-
         self.logger.debug('handle_close.  channels and self closed')
 
     def process(self):
         self.logger.debug('process')
-        for external_channel in self._channels:
-            external_channel.process()
+        for channel in self._channels:
+            channel.process()
 
     def _immediate_shutdown(self):
         self.logger.debug('_immediate_shutdown')
@@ -61,12 +59,14 @@ class ExternalChannel(asynchat.async_chat):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.debug('__init__')
 
-        asynchat.async_chat.__init__(self, sock)
+        # internal variables
         self._server = server
-        self._read_buffer = list()
-        self._request_queue = list()
+        self._requests = list()
         self._timeout = None
 
+        # async_chat
+        asynchat.async_chat.__init__(self, sock)
+        self._read_buffer = list()
         self.set_terminator(self._server.terminator)
 
     def collect_incoming_data(self, data):
@@ -75,43 +75,45 @@ class ExternalChannel(asynchat.async_chat):
 
     def found_terminator(self):
         request = json.loads(''.join(self._read_buffer))
-        self._read_buffer = []
-        self._handle_request(request)
-
         self.logger.debug('found_terminator.  request: {}'.format(request))
+        self._read_buffer = []
+        self._process_message(request)
+
+    def _process_message(self, request):
+        self.logger.info('_request_handler.')
+
+        request['type'] = 'external request'
+        request['timestamp'] = util.current_time()
+        request['key'] = util.get_hash(request['key'])
+
+        external_request = ExternalRequestCoordinator(server=self._server, request=request)
+        self._requests.append(external_request)
+
+        self.logger.debug('_request_handler. external_request appended: {}'.format(external_request))
 
     def _send_message(self, message):
         self.logger.info('_send_message.')
         self.logger.info('_send_message.  message {}'.format(message))
         self.push(util.pack_message(message, self._server._terminator))
 
-    def _handle_request(self, request):
-        self.logger.info('_handle_request.')
-        request['timestamp'] = util.current_time()
-        request['key'] = util.get_hash(request['key'])
-        external_request = ExternalRequest(request=request, server=self._server)
-        self._request_queue.append(external_request)
-
         # set timeout to be 30 seconds after last request received
         self._timeout = util.add_time(util.current_time(), 30)
-
-    def handle_error(self):
-        pass
 
     def process(self):
         """ Processes request queue and returns replies in the correct order"""
 
+        self.logger.info('process')
         # if timeout has been set and it's past the time
         if self._timeout and (util.current_time() > self._timeout):
             self.close_when_done()
             pass
 
         # process requests
-        for external_request in self._request_queue:
+        for external_request in self._requests:
             external_request.process()
 
         # send replies if ready
-        for index, external_request in enumerate(self._request_queue):
+        for index, external_request in enumerate(self._requests):
             if external_request.completed:
                 self._send_message(external_request._reply)
             else:
@@ -120,22 +122,23 @@ class ExternalChannel(asynchat.async_chat):
         # pop sent replies
         try:
             for _ in xrange(index+1):
-                self._request_queue.pop(0)
+                self._requests.pop(0)
         except:
             pass
 
 
-class ExternalRequest(object):
+class ExternalRequestCoordinator(object):
     """ enables requests to be processed in order."""
 
-    def __init__(self, request=None, server=None):
+    def __init__(self, server=None, request=None):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.debug('__init__')
 
         self._server = server
         self._reply = None
 
-        self._processor = self._handle_request(request)
+        self._reply_listener = self._reply_listener()
+        self._processor = self._request_handler(request)
 
     @property
     def completed(self):
@@ -149,13 +152,11 @@ class ExternalRequest(object):
         return self._processor.next()
 
     @util.coroutine
-    def _handle_request(self, request):
-        self.logger.info('_handle_request')
-        self.logger.debug('_handle_request.  request: {}'.format(request))
-
-        reply_listener = self._reply_listener()
-        self._server.internal_request_stage.handle_internal_request(request, reply_listener)
-        self.logger.info('_handle_request')
+    def _request_handler(self, request):
+        self.logger.info('_request_handler')
+        self.logger.debug('_request_handler.  request: {}'.format(request))
+        self._server.internal_request_stage.handle_internal_message(message=request, reply_listener=self._reply_listener)
+        self.logger.debug('_request_handler. handle_internal_request called.')
         while True:
             yield self.completed
 

@@ -4,8 +4,11 @@ import logging
 import util
 import json
 import socket
+import collections
+import random
 
 class InternalRequestStage(asyncore.dispatcher):
+
     """ Listens for external connections from other nodes and creates an InternalChannel upon accepting."""
 
     def __init__(self, server, hostname, internal_port):
@@ -28,7 +31,8 @@ class InternalRequestStage(asyncore.dispatcher):
     def handle_accept(self):
         if self.server.is_accepting_internal_requests():
             sock, client_address = self.accept()
-            internal_channel = InternalChannel(server=self._server, sock=sock, client_address=client_address)
+            internal_channel = InternalChannel(
+                server=self._server, sock=sock, client_address=client_address)
             self._channels.append(internal_channel)
 
     def handle_close(self):
@@ -44,19 +48,21 @@ class InternalRequestStage(asyncore.dispatcher):
     def process(self):
         self.logger.info('process')
         for coordinator in self._coordinators:
-            coordinator.process()
+            if coordinator.process():
+                self._coordinators.remove(coordinator)
 
-    def handle_internal_request(self, request, reply_listener):
+    def handle_internal_message(self, message=None, reply_listener=None, internal_channel=None):
         """ Send request to node_hash and report back to listener"""
-        self.logger.debug('handle_internal_request.')
-        coordinator = InternalRequestCoordinator(server=self._server, request=request, reply_listener=reply_listener)
+        self.logger.debug('handle_internal_message.')
+        coordinator = InternalRequestCoordinator(server=self._server, message=message, reply_listener=reply_listener)
         self._coordinators.append(coordinator)
-
+        self.logger.debug('handle_internal_message. coordinator appended.')
     def _immediate_shutdown(self):
         self.handle_close()
 
 class InternalChannel(asynchat.async_chat):
     """ Handles receiving requests from other nodes """
+
     def __init__(self, server=None, sock=None, client_address=None, node_hash=None, coordinator_listener=None):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.debug('__init__')
@@ -71,74 +77,68 @@ class InternalChannel(asynchat.async_chat):
 
         elif node_hash:     # for outgoing communication
             self._coordinator_listener = coordinator_listener
-            node_address = self._server.membership_stage.node_address(node_hash)
+            node_address = self._server.membership_stage.node_address(
+                node_hash)
             hostname, port = node_address.split(":")
             self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
                 self.connect((hostname, port))
             except:
-                self.logger.error('__init__.  failed to connect' )
+                self.logger.error('__init__.  failed to connect')
             asynchat.async_chat.__init__(self)
 
     def collect_incoming_data(self, data):
+        self.logger.info('collect_incoming_data')
         self._read_buffer.append(data)
 
     def found_terminator(self):
-        message = json.loads(''.join(self._read_buffer))
+        self.logger.info('found_terminator')
+        request = json.loads(''.join(self._read_buffer))
         self._read_buffer = []
-        self._process_incoming_message(message)
-        self.close_when_done()
+        self._process_message(request=request, internal_channel=self)
+
+    def close_when_done(self):
+        self.logger.info('close_when_done')
+        try:
+            self._server.internal_request_stage._channels.remove(self)
+        except:
+            pass
+        return asynchat.async_chat.close_when_done()
 
     def _send_message(self, message):
+        self.logger.info('_send_message')
         self.push(util.pack_message(message, self._server._terminator))
 
-    def _process_incoming_message(self, message):
-        self.logger.debug('_handle_message.  type: {}'.format(message['type']))
-        if messsage['type'] == 'request':
-            if request['command'] == 'put':
-                reply = self._server.persistence_stage.put(messsage['key'], messsage['value'], messsage['timestamp'])
-            elif request['command'] == 'get':
-                reply  = self._server.persistence_stage.get(messsage['key'])
-            elif request['command'] == 'delete':
-                reply = self._server.persistence_stage.delete(messsage['key'])
-            self.send_message(reply)
-        elif message['type'] == 'reply':
+    def _send_gossip(self, message, propagation_probability=0.5):
+        self.logger.info('_send_gossip')
+        if random.random() > propagation_probability:
+            self._send_message(message)
+
+    def _process_message(self, message):
+        self.logger.info('_process_message')
+
+        if message['type'] == 'reply':
+            self.logger.debug('_process_message.  type: {}, sending reply to coordinator listener'.format(message['type']))
             self._coordinator_listener.send(message)
-        elif message['type'] == 'announced failure':
-            self._handle_announced_failure_message(message)
-        elif message['type'] == 'unannounced failure':
-            self._handle_unannounced_failure_message(message)
+        else:
+            self.logger.debug('_process_message.  type: {}, '.format(message['type']))
+            self._server.internal_request_stage.handle_internal_request(request=message)
 
-    def _handle_announced_failure_message(self, message):
-        self.logger.debug('_handle_announced_failure')
-        # change membership
-        # accept any keys
-        # propagate message
-            #exponential backoff
-        pass
 
-    def _handle_unannounced_failure_message(self, message):
-        self.logger.debug('_handle_unannounced_failure')
-        # change membership
-        # accept any keys
-        # repartition keys if one of n + 2 replicas affected.
-            # pass keys out
-        pass
-
-    def handle_error(self):
-        self.logger.error('handle_error')
 
 class InternalRequestCoordinator(object):
-    def __init__(self, server=None, request=None, reply_listener=None, timeout=1, max_retries=3):
+
+    def __init__(self, server=None, message=None, reply_listener=None, internal_channel=None, timeout=1, max_retries=3):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.debug('__init__')
 
         self._server = server
-        self._request = request
+        self._message = message
         self._reply_listener = reply_listener
 
         # for communications
         self._complete = False
+
         self._replies = dict()
         self._channels = list()
 
@@ -146,10 +146,11 @@ class InternalRequestCoordinator(object):
         self._timeout = util.add_time(util.current_time(), timeout)
         self._retries = dict()
         self._max_retries = max_retries
+        self._outgoing_message = None
 
         #listener and processor
-        self._coordinator_listener = self._listener()
-        self._processor = self._handle_request(request=request, reply_listener=reply_listener)
+        self._coordinator_listener = self._coordinator_listener()
+        self._processor = self._request_handler(message=message, reply_listener=reply_listener, internal_channel=internal_channel)
 
     def process(self):
         """ returns:
@@ -167,25 +168,91 @@ class InternalRequestCoordinator(object):
         return self._complete
 
     @util.coroutine
-    def _handle_request(self, request, reply_listener):
-        self.logger.debug('_handle_request')
+    def _coordinator_listener(self):
+        self.logger.debug('_listener')
 
-        # only get commands have for internal values to return
-        if request['command'] in ['put', 'delete', 'shutdown']:
-            reply = {'error_code' : '\x00'}
-            reply_listener.send(reply)
+        for _ in xrange(self._server.num_replicas):
+            reply = (yield)
+            self._replies[reply['node_hash']] = reply
+            self.logger.debug('_listener. reply received: {}'.format(reply))
 
-        responsible_node_hashes = self._server.membership_stage.get_responsible_node_hashes(request['key'], num_replicas=self._server.num_replicas)
-        self.logger.debug('_handle_request.  key, node_hashes: {}, {}'.format(request['key'], responsible_node_hashes))
+        self._process_replies(self._message, self._replies)
 
-        for node_hash in responsible_node_hashes:
-            self._replies[node_hash] = None
-            self._retries[node_hash] = 0
+        while True:
+            yield True
 
-            if node_hash == self._server.node_hash:
-                self._handle_request_locally(request)
-            else:
-                self._handle_request_remotely(request)
+    def _process_replies(self, request, replies):
+        """ Process replies when listener has received
+                If the request is get, return the most recent value and perform repairs if necessary.
+        """
+        self.logger.debug('_process_replies')
+
+        if request['command'] in ['put', 'delete']:
+            replies = [reply['error_code'] for reply in replies.values()]
+            reply = {'error_code': max(set(replies), key=replies.count)}
+            if self._reply_listener:
+                self._reply_listener.send(reply)
+
+        elif request['command'] == 'get':
+            replies = sorted(self._replies.values(), key=lambda reply: reply['timestamp'])
+            newest_reply = replies[0]
+            reply = {
+                'error_code': newest_reply['error_code'],
+                'value': newest_reply['value']
+            }
+            if self._reply_listener:
+                self._reply_listener.send(reply)
+            # repair at read
+
+        else:
+            reply = replies[0]
+            self.logger.debug('_process_replies.  reply: {}'.format(reply))
+
+        self._complete = True
+
+    @util.coroutine
+    def _request_handler(self, message=None, reply_listener=None, internal_channel=None):
+        self.logger.info('_request_handler')
+
+        if message['type'] == 'external request':
+
+            if message['command'] in ['put', 'get', 'delete']:
+                self.logger.debug('_request_handler.  handling {} command'.format(message['command']))
+                responsible_node_hashes = self._server.membership_stage.get_responsible_node_hashes(message['key'], num_replicas=self._server.num_replicas)
+                self.logger.debug('_request_handler.  key, node_hashes: {}, {}'.format(message['key'], responsible_node_hashes))
+
+                for node_hash in responsible_node_hashes:
+                    self._replies[node_hash] = None
+                    self._retries[node_hash] = 0
+
+                    if node_hash == self._server.node_hash:
+                        reply = self._handle_request_locally(message)
+                        self._coordinator_listener.send(reply)
+                    else:
+                        self._handle_request_remotely(message)
+            elif message['command'] == 'shutdown':
+                reply = {'error_code': '\x00'}
+                reply_listener.send(reply)
+                self._handle_shutdown()
+
+        elif message['type'] == 'internal_request':
+            reply = self._handle_request_locally(request=message)
+            internal_channel._send_message(reply)
+            internal_channel.close_when_done()
+
+        elif message['type'] == 'reply':
+            self._coordinator_listener.send(message)
+
+        elif message['type'] == 'announced failure':
+            reply = self._handle_announced_failure_message(message)
+            internal_channel._send_message(reply)
+            internal_channel.close_when_done()
+
+        elif message['type'] == 'unannounced failure':
+            reply = self._handle_unannounced_failure_message(message)
+            internal_channel._send_message(reply)
+            internal_channel.close_when_done()
+
 
         while True:
             if self.timed_out and not self.complete:
@@ -195,15 +262,16 @@ class InternalRequestCoordinator(object):
 
     def _handle_request_locally(self, request):
         self.logger.debug('_handle_request_locally')
+
         if request['command'] == 'put':
             reply = self._server.persistence_stage.put(request['key'], request['value'], request['timestamp'])
         elif request['command'] == 'get':
-            reply = self._server.persistence_stage.put(request['key'], request['value'])
+            reply = self._server.persistence_stage.get(request['key'])
         elif request['command'] == 'delete':
-            reply = self._server.persistence_stage.put(request['key'], request['value'])
+            reply = self._server.persistence_stage.delete(request['key'])
 
-        self.logger.debug('_handle_request_locally.  sending reply: {}'.format(reply))
-        self._coordinator_listener.send(reply)
+        return reply
+        self.logger.debug('_handle_request_locally.  returning reply: {}'.format(reply))
 
     def _handle_request_remotely(self, request, node_hash):
         self.logger.debug('_handle_request_remotely')
@@ -214,12 +282,36 @@ class InternalRequestCoordinator(object):
         except:
             pass
 
+    def _handle_shutdown(self):
+        # remove self from hash ring
+        self._server.membership_stage.remove_hash(self._server.node_hash)
+        #
+
+        self._outgoing_message = {
+            'type': 'announced failure',
+            'node_hash': self._server.node_hash
+        }
+
+        node_hashes_to_be_notified = random.sample(self._serve.membership_stage.node_hashes, self._server.num_replicas)
+
+        for node_hash in node_hashes_to_be_notified:
+            self._replies[node_hash] = None
+            self._retries[node_hash] = 0
+            internal_channel = InternalChannel(server=self._server, node_hash=node_hash, coordinator_listener=self._coordinator_listener)
+            internal_channel._send_message(self._outgoing_message)
+            self._channels.append(internal_channel)
+
+    def _handle_announced_failure(self):
+        # attempt to remove node from own hash ring
+        if self._server.membership_stage.remove_node_hash(self._server.node_hash):
+            pass
+
     def _handle_timeout(self):
         """  Retries requests up to _max_num_tries, then considers
         """
         for node_hash, reply in self._replies:
             if not reply:
-                if ( self._retries[node_hash] < self._max_retries ):
+                if (self._retries[node_hash] < self._max_retries):
                     self._retries[node_hash] += 1
                     self._handle_request_remotely(self._request, node_hash)
                 else:
@@ -227,37 +319,4 @@ class InternalRequestCoordinator(object):
             else:
                 self._coordinator_listener.send(reply)
 
-    @util.coroutine
-    def _listener(self):
-        self.logger.debug('_listener')
 
-        for _ in xrange(self._server.num_replicas):
-            reply = (yield)
-            self._replies[reply['node_hash']] = reply
-            self.logger.debug('_listener. reply received: {}'.format(reply))
-
-        self._process_replies()
-
-        while True:
-            yield True
-
-    def _process_replies(self):
-        """ Process replies when listener has received
-                If the request is get, return the most recent value and perform repairs if necessary.
-        """
-
-        self.logger.debug('_process_replies')
-
-        if self._request['command'] == 'get':
-            replies = self._replies.values().sort(self._replies, key=lambda reply: reply['timestamp'])
-            newest_reply = replies[0]
-            self._reply_listener.send(newest_reply)
-
-            for node_hash, reply in self._replies:
-                if reply['value'] != newest_value:
-                    pass # repair at read
-        else:
-            reply = self._replies.values()[0]
-            self.logger.debug('_process_replies.  reply: {}'.format(reply))
-
-        self._complete = True

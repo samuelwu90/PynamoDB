@@ -22,14 +22,29 @@ class ConsistentHashRing(object):
 
 
     def add_node_hash(self, node_hash=None):
-        """ add node hash to hash ring """
+        """ add node hash to hash ring.
+
+            Returns:
+                True if node_hash has already been removed
+                False if the node_hash hasn't already been removed
+         """
         if node_hash:
             bisect.insort(self._hash_ring, node_hash)
 
     def remove_node_hash(self, node_hash=None):
         """ remove node from hash ring """
         if node_hash:
-            self._hash_ring.remove(node_hash)
+            try:
+                self._hash_ring.remove(node_hash)
+                return False
+            except ValueError:
+                return True
+
+
+    @property
+    def hash_ring(self):
+        return self._hash_ring
+
 
     def get_responsible_node_hashes(self, key_hash=None, num_replicas=3):
         """ Returns:

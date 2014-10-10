@@ -12,8 +12,8 @@ class PynamoServer(object):
 
         self._persistence_stage = PersistenceStage(server=self)
         self._membership_stage = MembershipStage(server=self, node_addresses=node_addresses)
-        self._external_request_stage = ExternalRequestStage(self, hostname, external_port)
-        self._internal_request_stage = InternalRequestStage(self, hostname, internal_port)
+        self._external_request_stage = ExternalRequestStage(server=self, hostname=hostname, external_port=external_port)
+        self._internal_request_stage = InternalRequestStage(server=self, hostname=hostname, internal_port=internal_port)
 
 
         self._node_hash = util.get_hash("{}:{}".format(hostname, external_port))

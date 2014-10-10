@@ -56,19 +56,17 @@ class PynamoClient(asynchat.async_chat):
         self._requests.append(message)
         self.send_message(message)
 
-    def get(self, key, value):
+    def get(self, key):
         self.logger.info('get')
-        message = dict()
         message = {
-            'command' : 'put',
+            'command' : 'get',
             'key' : key
         }
         self._requests.append(message)
         self.send_message(message)
 
-    def delete(self, key, value):
+    def delete(self, key):
         self.logger.info('delete')
-        message = dict()
         message = {
             'command' : 'delete',
             'key' : key
@@ -78,7 +76,6 @@ class PynamoClient(asynchat.async_chat):
 
     def shutdown(self, key, value):
         self.logger.info('shutdown')
-        message = dict()
         message = {
             'command' : 'shutdown'
         }
