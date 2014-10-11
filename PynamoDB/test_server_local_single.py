@@ -3,7 +3,8 @@
     ~~~~~~~~~~~~
     clear; python -m unittest discover -v
 """
-
+import pprint
+import select
 import asyncore
 import unittest
 import socket
@@ -26,7 +27,7 @@ class TestLocalServerSingle(unittest.TestCase):
 
         self.server = PynamoServer(self.hostname, self.external_port, self.internal_port, self.node_addresses, num_replicas=1)
         self.client = PynamoClient(self.hostname, self.external_port)
-
+        asyncore.loop(timeout=0.001, count=2)
 
     def tearDown(self):
         try:
@@ -37,6 +38,7 @@ class TestLocalServerSingle(unittest.TestCase):
             self.client._immediate_shutdown()
         except:
             pass
+        asyncore.loop(timeout=0.001, count=1)
 
     def test_server_client_startup(self):
         pass
@@ -55,11 +57,10 @@ class TestLocalServerSingle(unittest.TestCase):
         lookup_node_hash = self.server.membership_stage._node_lookup.keys()[0]
         self.assertEqual(server_node_hash, lookup_node_hash)
 
-    def test_client_put_single(self):
+    def test_put_single(self):
         key = 'key'
         value = 'value'
 
-        asyncore.loop(timeout=0.001, count=5)
         self.client.put(key, value)
         for _ in xrange(5):
             asyncore.loop(timeout=0.001, count=1)
@@ -70,7 +71,6 @@ class TestLocalServerSingle(unittest.TestCase):
     def test_client_put_1000(self):
         """ 1000 put requests to single local server"""
         num_puts = 1000
-        asyncore.loop(timeout=0.001, count=5)
 
         for i in xrange(num_puts):
             key = util.offset_hex(self.server.node_hash, -i)
@@ -91,7 +91,6 @@ class TestLocalServerSingle(unittest.TestCase):
 
     def test_client_get_1000(self):
         n = 1000
-        asyncore.loop(timeout=0.001, count=5)
 
         for i in xrange(n):
             key = util.offset_hex(self.server.node_hash, -i)
@@ -118,8 +117,6 @@ class TestLocalServerSingle(unittest.TestCase):
     def test_client_get_1000_nonexistent_keys(self):
         n = 1000
 
-        asyncore.loop(timeout=0.001, count=5)
-
         for i in xrange(n):
             key = util.offset_hex(self.server.node_hash, -i)
             self.client.get(key)
@@ -136,8 +133,6 @@ class TestLocalServerSingle(unittest.TestCase):
     def test_client_get_1000_nonexistent_keys(self):
         n = 1000
 
-        asyncore.loop(timeout=0.001, count=5)
-
         for i in xrange(n):
             key = util.offset_hex(self.server.node_hash, -i)
             self.client.get(key)
@@ -153,7 +148,6 @@ class TestLocalServerSingle(unittest.TestCase):
 
     def test_client_delete_1000(self):
         n = 1000
-        asyncore.loop(timeout=0.001, count=5)
 
         for i in xrange(n):
             key = util.offset_hex(self.server.node_hash, -i)
@@ -178,8 +172,6 @@ class TestLocalServerSingle(unittest.TestCase):
     def test_client_delete_1000_nonexistent_keys(self):
         n = 1000
 
-        asyncore.loop(timeout=0.001, count=5)
-
         for i in xrange(n):
             key = util.offset_hex(self.server.node_hash, -i)
             self.client.delete(key)
@@ -194,32 +186,23 @@ class TestLocalServerSingle(unittest.TestCase):
             self.assertEqual(reply['error_code'], '\x01')
 
 
-class TestLocalServerFive(unittest.TestCase):
+    def test_shutdown(self):
+        """ Send shutdown command, disconnect client, reconnect client, send put and expect no reply."""
 
-    def setUp(self):
-        num_servers = 5
-        hostname = "localhost"
-        self.node_addresses = []
-        for i in num_servers:
-            external_port = 50000 + ( i * 2 - 1)
-            internal_port = 50000 + ( i * 2 )
-            self.node_addresses.append("{}:{}".format(hostname, str(external_port))
-            self.server = PynamoServer(hostname, self.external_port, self.internal_port, self.node_addresses, num_replicas=1)
+        self.client.shutdown()
+        for _ in xrange(5):
+            asyncore.loop(timeout=0.001, count=1)
+            self.server.process()
+
+        self.assertEqual(self.client.replies[0]['error_code'], '\x00')
+        self.client._immediate_shutdown()
 
         self.client = PynamoClient(self.hostname, self.external_port)
 
+        self.client.put('key', 'value')
+        for _ in xrange(5):
+            asyncore.loop(timeout=0.001, count=1)
+            self.server.process()
 
-    def tearDown(self):
-        for server in self.servers:
-            try:
-                self.server._immediate_shutdown()
-            except:
-                pass
-        try:
-            self.client._immediate_shutdown()
-        except:
-            pass
 
-    def test_server_client_startup(self):
-        pass
-
+        self.assertFalse(self.client.replies)
