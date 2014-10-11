@@ -27,7 +27,7 @@ class PynamoClient(asynchat.async_chat):
         try:
             self.connect((host, port))
         except:
-            print "Refused"
+            self.logger.error('__init__.  connection refused.')
 
     @property
     def requests(self):
@@ -39,7 +39,7 @@ class PynamoClient(asynchat.async_chat):
 
     def _immediate_shutdown(self):
         self.logger.info('_immediate_shutdown')
-        self.handle_when_done()
+        self.close_when_done()
 
     def send_message(self, message):
         self.logger.info('send_message')
@@ -74,7 +74,7 @@ class PynamoClient(asynchat.async_chat):
         self._requests.append(message)
         self.send_message(message)
 
-    def shutdown(self, key, value):
+    def shutdown(self):
         self.logger.info('shutdown')
         message = {
             'command' : 'shutdown'
