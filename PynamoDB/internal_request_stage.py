@@ -13,7 +13,7 @@ class InternalRequestStage(asyncore.dispatcher):
 
     def __init__(self, server, hostname, internal_port):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
-        self.logger.debug('__init__')
+        self.logger.info('__init__')
 
         self._server = server
         self._hostname = hostname
@@ -28,12 +28,16 @@ class InternalRequestStage(asyncore.dispatcher):
         self.bind((hostname, int(internal_port)))
         self.listen(5)
 
+        self.logger.debug('__init__ complete')
+
     def handle_accept(self):
-        if self.server.is_accepting_internal_requests():
+        self.logger.info('handle_accept')
+        if self._server.is_accepting_internal_requests:
             sock, client_address = self.accept()
-            internal_channel = InternalChannel(
-                server=self._server, sock=sock, client_address=client_address)
+            internal_channel = InternalChannel(server=self._server, sock=sock, client_address=client_address)
             self._channels.append(internal_channel)
+            self.logger.debug('handle_accept.  accepting connection from: {}'.format(client_address))
+
 
     def handle_close(self):
         self.logger.info('handle_close')
@@ -54,7 +58,12 @@ class InternalRequestStage(asyncore.dispatcher):
     def handle_internal_message(self, message=None, reply_listener=None, internal_channel=None):
         """ Send request to node_hash and report back to listener"""
         self.logger.debug('handle_internal_message.')
-        coordinator = InternalRequestCoordinator(server=self._server, message=message, reply_listener=reply_listener)
+        if reply_listener:
+            coordinator = InternalRequestCoordinator(server=self._server, message=message, reply_listener=reply_listener)
+
+        elif internal_channel:
+            coordinator = InternalRequestCoordinator(server=self._server, message=message, internal_channel=internal_channel)
+
         self._coordinators.append(coordinator)
         self.logger.debug('handle_internal_message. coordinator appended.')
     def _immediate_shutdown(self):
@@ -65,9 +74,10 @@ class InternalChannel(asynchat.async_chat):
 
     def __init__(self, server=None, sock=None, client_address=None, node_hash=None, coordinator_listener=None):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
-        self.logger.debug('__init__')
+        self.logger.info('__init__')
 
         self._server = server
+        self._read_buffer = []
 
         self.set_terminator(self._server.terminator)
 
@@ -76,16 +86,16 @@ class InternalChannel(asynchat.async_chat):
             asynchat.async_chat.__init__(self, sock)
 
         elif node_hash:     # for outgoing communication
+            asynchat.async_chat.__init__(self)
             self._coordinator_listener = coordinator_listener
-            node_address = self._server.membership_stage.node_address(
-                node_hash)
-            hostname, port = node_address.split(":")
+            hostname, port = self._server.membership_stage.node_address(node_hash)
             self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                self.connect((hostname, port))
+                self.connect((str(hostname), int(port)))
             except:
                 self.logger.error('__init__.  failed to connect')
-            asynchat.async_chat.__init__(self)
+
+        self.logger.debug('__init__ complete')
 
     def collect_incoming_data(self, data):
         self.logger.info('collect_incoming_data')
@@ -93,48 +103,45 @@ class InternalChannel(asynchat.async_chat):
 
     def found_terminator(self):
         self.logger.info('found_terminator')
-        request = json.loads(''.join(self._read_buffer))
+        message = json.loads(''.join(self._read_buffer))
         self._read_buffer = []
-        self._process_message(request=request, internal_channel=self)
-
-    def close_when_done(self):
-        self.logger.info('close_when_done')
-        try:
-            self._server.internal_request_stage._channels.remove(self)
-        except:
-            pass
-        return asynchat.async_chat.close_when_done()
+        self._process_message(message=message, internal_channel=self)
 
     def _send_message(self, message):
         self.logger.info('_send_message')
         self.push(util.pack_message(message, self._server._terminator))
+        self.logger.debug('_send_message.  message sent')
 
     def _send_gossip(self, message, propagation_probability=0.5):
         self.logger.info('_send_gossip')
         if random.random() > propagation_probability:
             self._send_message(message)
 
-    def _process_message(self, message):
+    def _process_message(self, message=None, internal_channel=None):
         self.logger.info('_process_message')
+        self.logger.debug('_process_message.  node_hash: {}'.format(self._server.node_hash))
 
         if message['type'] == 'reply':
             self.logger.debug('_process_message.  type: {}, sending reply to coordinator listener'.format(message['type']))
             self._coordinator_listener.send(message)
         else:
-            self.logger.debug('_process_message.  type: {}, '.format(message['type']))
-            self._server.internal_request_stage.handle_internal_request(request=message)
+            self.logger.debug('_process_message.  type: {} '.format(message['type']))
+            self.logger.debug('_process_message.  calling handle_internal_message')
+            self._server.internal_request_stage.handle_internal_message(message=message, internal_channel=internal_channel)
 
 
 
 class InternalRequestCoordinator(object):
 
-    def __init__(self, server=None, message=None, reply_listener=None, internal_channel=None, timeout=1, max_retries=3):
+    def __init__(self, server=None, message=None, reply_listener=None, internal_channel=None, timeout=1000000, max_retries=3):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
-        self.logger.debug('__init__')
+        self.logger.info('__init__')
+        self.logger.debug('__init__.  node_hash: {}'.format(server.node_hash))
 
         self._server = server
         self._message = message
         self._reply_listener = reply_listener
+        self._internal_channel = internal_channel
 
         # for communications
         self._complete = False
@@ -213,12 +220,13 @@ class InternalRequestCoordinator(object):
     @util.coroutine
     def _request_handler(self, message=None, reply_listener=None, internal_channel=None):
         self.logger.info('_request_handler')
+        self.logger.debug('_request_handler')
 
         if message['type'] == 'external request':
-
             if message['command'] in ['put', 'get', 'delete']:
-                self.logger.debug('_request_handler.  handling {} command'.format(message['command']))
-                responsible_node_hashes = self._server.membership_stage.get_responsible_node_hashes(message['key'], num_replicas=self._server.num_replicas)
+                self.logger.debug('_request_handler.  handling external {} command'.format(message['command']))
+
+                responsible_node_hashes = self._server.membership_stage.get_responsible_node_hashes(message['key'])
                 self.logger.debug('_request_handler.  key, node_hashes: {}, {}'.format(message['key'], responsible_node_hashes))
 
                 for node_hash in responsible_node_hashes:
@@ -229,13 +237,15 @@ class InternalRequestCoordinator(object):
                         reply = self._handle_request_locally(message)
                         self._coordinator_listener.send(reply)
                     else:
-                        self._handle_request_remotely(message)
+                        message['type'] = 'internal request'
+                        self._handle_request_remotely(message, node_hash)
             elif message['command'] == 'shutdown':
                 reply = {'error_code': '\x00'}
                 reply_listener.send(reply)
                 self._handle_shutdown()
 
-        elif message['type'] == 'internal_request':
+        elif message['type'] == 'internal request':
+            self.logger.debug('_request_handler.  handling internal {} command'.format(message['command']))
             reply = self._handle_request_locally(request=message)
             internal_channel._send_message(reply)
             internal_channel.close_when_done()
@@ -274,11 +284,14 @@ class InternalRequestCoordinator(object):
         self.logger.debug('_handle_request_locally.  returning reply: {}'.format(reply))
 
     def _handle_request_remotely(self, request, node_hash):
-        self.logger.debug('_handle_request_remotely')
+        self.logger.info('_handle_request_remotely')
         try:
-            internal_channel = self.InternalChannel(coordinator_listener=self._coordinator_listener)
+            internal_channel = InternalChannel(server=self._server, node_hash=node_hash, coordinator_listener=self._coordinator_listener)
+            self.logger.debug('_handle_request_remotely.  created internal channel.')
             internal_channel._send_message(request)
+            self.logger.debug('_handle_request_remotely.  sending request.')
             self._channels.append(internal_channel)
+            self.logger.debug('_handle_request_remotely.  appending internal channel.')
         except:
             pass
 
