@@ -55,12 +55,10 @@ class ConsistentHashRing(object):
         self.logger.info('get_responsible_node_hashes.  key_hash, num_replicas: {}, {}'.format(key_hash, self.num_replicas))
 
         if self.hash_ring and key_hash:
+            primary_position = bisect.bisect_left(self.hash_ring, key_hash)
             if len(self.hash_ring) >= self.num_replicas:
-                primary_position = bisect.bisect_left(self.hash_ring, key_hash)
-                return [self._hash_ring[ i % len(self._hash_ring) ] for i in xrange(primary_position, primary_position + self.num_replicas)]
+                return [self._hash_ring[ (primary_position + i) % len(self._hash_ring) ] for i in xrange(self.num_replicas)]
             else:
-                primary_position = bisect.bisect_left(self.hash_ring, key_hash)
-                return [self._hash_ring[ i % len(self._hash_ring) ] for i in xrange(primary_position, primary_position + len(self.hash_ring))]
-
+                return [self._hash_ring[ (primary_position + i) % len(self._hash_ring) ] for i in xrange(len(self.hash_ring))]
         else:
             return list()
