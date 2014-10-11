@@ -4,6 +4,7 @@
     clear; python -m unittest discover -v
 """
 
+import bisect
 import pprint
 import asyncore
 import logging
@@ -80,3 +81,27 @@ class TestLocalServerFive(unittest.TestCase):
         responsible_node_hashes_from_function = set(server.membership_stage.get_responsible_node_hashes(key_hash))
 
         self.assertEqual(responsible_node_hashes, responsible_node_hashes_from_function)
+
+    def _test_partition_keys(self):
+        server = random.choice(self.servers)
+        client = PynamoClient(server.hostname, int(server.external_port))
+        node_hashes = server.membership_stage.node_hashes
+
+        for _ in xrange(1000):
+            key = util.get_hash(str(random.random()))
+            value = util.get_hash(key)
+            client.put(key, value)
+            for x in xrange(5):
+                self.run_servers()
+
+        partition = server.membership_stage.partition_keys()
+
+        # ensure only a num_replica number of partitions are present on a node
+        self.assertTrue(sum(bool(value) for value in partition.values()) <= server.num_replicas)
+
+        # ensure each key is assigned to its primary responsible node hash
+        for node_hash in partition:
+            for key in partition[node_hash]:
+                responsible_node_hash = node_hashes[bisect.bisect_left(node_hashes, key) % len(node_hashes)]
+                self.assertTrue(node_hash, responsible_node_hash)
+        client._immediate_shutdown()
