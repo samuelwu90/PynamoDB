@@ -3,12 +3,19 @@ from membership_stage import MembershipStage
 from external_request_stage import ExternalRequestStage
 from internal_request_stage import InternalRequestStage
 import util
-
+import logging
 
 class PynamoServer(object):
 
     def __init__(self, hostname, external_port, internal_port, node_addresses=None, num_replicas=3):
+        self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
+        self.logger.info('__init__')
+
         self._num_replicas = num_replicas
+
+        self.hostname = hostname
+        self.external_port = external_port
+        self.internal_port = internal_port
 
         self._persistence_stage = PersistenceStage(server=self)
         self._membership_stage = MembershipStage(server=self, node_addresses=node_addresses)
@@ -16,11 +23,13 @@ class PynamoServer(object):
         self._internal_request_stage = InternalRequestStage(server=self, hostname=hostname, internal_port=internal_port)
 
 
-        self._node_hash = util.get_hash("{}:{}".format(hostname, external_port))
+        self._node_hash = util.get_hash("{}, {}, {}".format(hostname, str(external_port), str(internal_port)))
         self._terminator = "\r\n"
 
         self._external_shutdown_flag = False
         self._internal_shutdown_flag = False
+
+        self.logger.debug('__init__ complete.')
 
     def process(self):
         """ Instructs processors to process requests.
@@ -31,6 +40,7 @@ class PynamoServer(object):
         self.membership_stage.process()
 
     def _immediate_shutdown(self):
+        self.logger.info('_immediate_shutdown')
         self.internal_request_stage._immediate_shutdown()
         self.external_request_stage._immediate_shutdown()
 
