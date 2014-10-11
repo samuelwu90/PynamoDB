@@ -10,11 +10,14 @@ import datetime
 
 
 def current_time():
-    return datetime.datetime.utcnow()
+    return str(datetime.datetime.utcnow())
 
 def add_time(timestamp, seconds):
-    previous_timestamp = datetime.datetime.strptime(str(timestamp), "%Y-%m-%d %H:%M:%S.%f")
-    return previous_timestamp + datetime.timedelta(seconds=seconds)
+    previous_timestamp = to_datetime(timestamp)
+    return str(previous_timestamp + datetime.timedelta(seconds=seconds))
+
+def to_datetime(timestamp):
+    return datetime.datetime.strptime(str(timestamp), "%Y-%m-%d %H:%M:%S.%f")
 
 def get_hash(value):
     """ Return a 32-byte hash of value as a hex string"""
