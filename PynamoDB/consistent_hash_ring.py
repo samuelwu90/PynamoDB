@@ -7,9 +7,10 @@ class ConsistentHashRing(object):
         It is assumed that nodes and keys have been hashed appropriately prior to interaction with hash ring.
     """
 
-    def __init__(self, node_hashes=None):
+    def __init__(self, node_hashes=None, num_replicas=3):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.debug('__init__')
+        self.num_replicas = num_replicas
 
         if node_hashes:
             self._hash_ring = sorted(node_hashes)
@@ -19,7 +20,6 @@ class ConsistentHashRing(object):
     def __len__(self):
         """ Returns the number of nodes still in hash ring"""
         return len(self._hash_ring)
-
 
     def add_node_hash(self, node_hash=None):
         """ add node hash to hash ring.
@@ -40,22 +40,27 @@ class ConsistentHashRing(object):
             except ValueError:
                 return True
 
-
     @property
     def hash_ring(self):
         return self._hash_ring
 
-
-    def get_responsible_node_hashes(self, key_hash=None, num_replicas=3):
+    def get_responsible_node_hashes(self, key_hash=None):
         """ Returns:
                 n nodes clockwise of given key hash where n = num_replicas
 
             Example:
                 for nodes [ 'A', 'B', 'C', 'D' ] and key 'AA', [ 'B', 'C', 'D' ] would be returned.
         """
-
         self.logger.info('get_responsible_node_hashes')
-        self.logger.info('get_responsible_node_hashes.  key_hash, num_replicas: {}, {}'.format(key_hash, num_replicas))
-        if key_hash:
-            primary_position = bisect.bisect_left(self._hash_ring, key_hash)
-            return [self._hash_ring[ i % len(self._hash_ring) ] for i in xrange(primary_position, primary_position + num_replicas)]
+        self.logger.info('get_responsible_node_hashes.  key_hash, num_replicas: {}, {}'.format(key_hash, self.num_replicas))
+
+        if self.hash_ring and key_hash:
+            if len(self.hash_ring) >= self.num_replicas:
+                primary_position = bisect.bisect_left(self.hash_ring, key_hash)
+                return [self._hash_ring[ i % len(self._hash_ring) ] for i in xrange(primary_position, primary_position + self.num_replicas)]
+            else:
+                primary_position = bisect.bisect_left(self.hash_ring, key_hash)
+                return [self._hash_ring[ i % len(self._hash_ring) ] for i in xrange(primary_position, primary_position + len(self.hash_ring))]
+
+        else:
+            return list()
