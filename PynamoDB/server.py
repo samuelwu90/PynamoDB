@@ -10,6 +10,11 @@ import getopt
 
 class PynamoServer(object):
     def __init__(self, hostname, external_port, internal_port, node_addresses=None, wait_time=1, num_replicas=3):
+        logging.basicConfig(filename='./logs/pynamo.log',
+                level=logging.DEBUG,
+                format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+                )
+
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.info('__init__')
 
@@ -118,10 +123,7 @@ class PynamoServer(object):
         return not self._internal_shutdown_flag
 
 def main(argv):
-    logging.basicConfig(filename='./logs/pynamo.log',
-                    level=logging.DEBUG,
-                    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
-                    )
+
     try:
       opts, args = getopt.getopt(argv,"hi:d:")
     except getopt.GetoptError:

@@ -11,7 +11,7 @@ while read line; do
     cd ~/git/PynamoDB
     git pull
     mkdir -p ~/git/PynamoDB/logs
-    touch ~/git/PynamoDB/logs/pynamo.log
+    rm ~/git/PynamoDB/*.log
     server=~/git/PynamoDB/PynamoDB/server.py
     chmod u+x \$server
     echo \$server
