@@ -147,8 +147,11 @@ def main(argv):
     print "Starting server with node_file and dns_name: {}, {}".format(node_file, self_dns_name)
 
     while True:
-        asyncore.loop(timeout=0.001, count=1)
-        server.process()
+        try:
+            asyncore.loop(timeout=0.001, count=1)
+            server.process()
+        except:
+            server._immediate_shutdown()
 
 if __name__ == "__main__":
     main(sys.argv[1:])
