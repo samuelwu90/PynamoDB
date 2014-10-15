@@ -10,7 +10,6 @@ while read line; do
     kill $(ps aux | grep python | awk '{print $2}')
     cd ~/git/PynamoDB
     mkdir -p ~/git/PynamoDB/logs
-    rm -rf ~/git/PynamoDB/logs/*
     git pull
     server=~/git/PynamoDB/PynamoDB/server.py
     echo \$server

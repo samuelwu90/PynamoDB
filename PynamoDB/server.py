@@ -8,7 +8,7 @@ import logging
 import sys
 import getopt
 
-logging.basicConfig(filename='./logs/pynamo.log',
+logging.basicConfig(filename='pynamo.log',
                     level=logging.DEBUG,
                     format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
                     )
