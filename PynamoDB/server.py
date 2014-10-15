@@ -7,18 +7,19 @@ import logging
 
 class PynamoServer(object):
 
-    def __init__(self, hostname, external_port, internal_port, node_addresses=None, num_replicas=3):
+    def __init__(self, hostname, external_port, internal_port, node_addresses=None, wait_time=1, num_replicas=3):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.info('__init__')
 
         self._num_replicas = num_replicas
+        self._num_nodes = len(node_addresses)
 
         self.hostname = hostname
         self.external_port = external_port
         self.internal_port = internal_port
 
         self._persistence_stage = PersistenceStage(server=self)
-        self._membership_stage = MembershipStage(server=self, node_addresses=node_addresses)
+        self._membership_stage = MembershipStage(server=self, node_addresses=node_addresses, wait_time=wait_time)
         self._external_request_stage = ExternalRequestStage(server=self, hostname=hostname, external_port=external_port)
         self._internal_request_stage = InternalRequestStage(server=self, hostname=hostname, internal_port=internal_port)
 
@@ -35,9 +36,20 @@ class PynamoServer(object):
         """ Instructs processors to process requests.
             Called after each asynchronous loop.
         """
-        self.internal_request_stage.process()
-        self.external_request_stage.process()
-        self.membership_stage.process()
+        try:
+            self.internal_request_stage.process()
+        except:
+            self.logger.error('internal_request_stage .process() error.')
+
+        try:
+            self.external_request_stage.process()
+        except:
+            self.logger.error('external_request_stage .process() error.')
+
+        try:
+            self.membership_stage.process()
+        except:
+            self.logger.error('membership_stage .process() error.')
 
     def _immediate_shutdown(self):
         self.logger.info('_immediate_shutdown')

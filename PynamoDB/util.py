@@ -7,6 +7,7 @@
 import json
 import hashlib
 import datetime
+import math
 
 
 def current_time():
@@ -42,6 +43,9 @@ def coroutine(func):
         cr.next()
         return cr
     return start
+
+def get_gossip_decay_factor(num_nodes, num_replicas):
+    return 1 - pow(num_replicas, 2)/(num_nodes * math.log(num_nodes))
 
 class ErrorCode(object):
     """ Object for passing around error codes from put/get/delete commands"""

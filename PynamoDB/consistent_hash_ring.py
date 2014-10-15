@@ -36,9 +36,9 @@ class ConsistentHashRing(object):
         if node_hash:
             try:
                 self._hash_ring.remove(node_hash)
-                return False
-            except ValueError:
                 return True
+            except ValueError:
+                return False
 
     @property
     def hash_ring(self):

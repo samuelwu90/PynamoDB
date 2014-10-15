@@ -11,7 +11,7 @@ class PersistenceEngine(object):
     def __init__(self):
         self._persistence = dict()
 
-    def keys():
+    def keys(self):
         return self._persistence.keys()
 
     def put(self, key, value, timestamp):

@@ -15,19 +15,6 @@ class PersistenceStage(object):
     def keys(self):
         return self._persistence_engine.keys()
 
-    def partition_keys(self):
-        """ Returns:
-                a dict() where:
-                    keys: node_hashes
-                    values: keys for which the given node_hash is responsible
-        """
-        partitioned_keys = collections.defaultdict(list)
-
-        for key in self.server.persistence_stage.keys():
-            partitioned_keys[key.node_hash].append(key)
-
-        return partitioned_keys
-
     def put(self, key, value, timestamp=None):
         """ Returns:
                 error code \x00 if put is successful

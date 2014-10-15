@@ -22,7 +22,7 @@ logging.basicConfig(filename='pynamo.log',
                     format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
                     )
 
-class TestLocalServerFive(unittest.TestCase):
+class TestMembershipStage(unittest.TestCase):
 
     def setUp(self):
         num_servers = 6
@@ -107,11 +107,11 @@ class TestLocalServerFive(unittest.TestCase):
     def test_partition_keys(self):
         """ put n keys on servers, get partition, check that each key in partition is assigned to its primary responsible node"""
 
-        self.put_n_times(1000)
+        self.put_n_times(100)
 
         server = random.choice(self.servers)
         node_hashes = server.membership_stage.node_hashes
-        partition = server.membership_stage.partition_keys()
+        partition = server.membership_stage._partition_keys()
 
         # ensure only a num_replica number of partitions are present on a node
         self.assertTrue(sum(bool(value) for value in partition.values()) <= server.num_replicas)
@@ -122,13 +122,31 @@ class TestLocalServerFive(unittest.TestCase):
                 responsible_node_hash = node_hashes[bisect.bisect_left(node_hashes, key) % len(node_hashes)]
                 self.assertTrue(node_hash, responsible_node_hash)
 
-    def test_partition_keys_for_announced_failure(self):
-        """ put n keys on servers, get reassignment partition, check keys not already on nodes, nodes actually responsible for key"""
+    def test_key_value_partition(self):
+        """ put n keys on servers, get partition, check that each key in partition is assigned to its primary responsible node"""
 
-        self.put_n_times(1000)
+        self.put_n_times(100)
 
         server = random.choice(self.servers)
-        new_partition = server.membership_stage._partition_keys_for_announced_failure()
+        node_hashes = server.membership_stage.node_hashes
+        partition = server.membership_stage.key_value_partition()
+
+        # ensure only a num_replica number of partitions are present on a node
+        self.assertTrue(sum(bool(value) for value in partition.values()) <= server.num_replicas)
+
+        # ensure each key is assigned to its primary responsible node hash
+        for node_hash in partition:
+            for key in partition[node_hash]:
+                responsible_node_hash = node_hashes[bisect.bisect_left(node_hashes, key) % len(node_hashes)]
+                self.assertTrue(node_hash, responsible_node_hash)
+
+    def test_partition_for_announced_failure(self):
+        """ put n keys on servers, get reassignment partition, check keys not already on nodes, nodes actually responsible for key"""
+
+        self.put_n_times(100)
+
+        server = random.choice(self.servers)
+        new_partition = server.membership_stage._partition_for_announced_failure()
         server.membership_stage.remove_node_hash(server.node_hash)
 
         for node_hash in new_partition:
@@ -137,3 +155,6 @@ class TestLocalServerFive(unittest.TestCase):
                 self.assertFalse(self.server_lookup[node_hash].persistence_stage.get(key_hash)['value'])
                 # ensure each node_hash is actually responsible for the key with server's node_hash removed
                 self.assertTrue(node_hash in server.membership_stage.get_responsible_node_hashes(key_hash))
+
+    def test_partition_for_unannounced_failure(self):
+        pass
