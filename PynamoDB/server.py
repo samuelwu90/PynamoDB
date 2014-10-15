@@ -44,7 +44,7 @@ class PynamoServer(object):
                 node_addresses.append(line)
 
         for node_address in node_addresses:
-            public_dns_name, external_port, internal_port = line.split(',')
+            public_dns_name, external_port, internal_port = node_address.split(',')
             print public_dns_name, self_dns_name
             if public_dns_name == self_dns_name:
                 server = cls(   hostname=public_dns_name,
