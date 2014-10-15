@@ -1,0 +1,10 @@
+ec2-54-183-183-23.us-west-1.compute.amazonaws.com,50000,50001
+ec2-54-215-247-221.us-west-1.compute.amazonaws.com,50000,50001
+ec2-54-215-216-210.us-west-1.compute.amazonaws.com,50000,50001
+ec2-54-215-251-18.us-west-1.compute.amazonaws.com,50000,50001
+ec2-54-215-247-230.us-west-1.compute.amazonaws.com,50000,50001
+ec2-54-215-147-10.us-west-1.compute.amazonaws.com,50000,50001
+ec2-54-215-225-173.us-west-1.compute.amazonaws.com,50000,50001
+ec2-54-215-252-164.us-west-1.compute.amazonaws.com,50000,50001
+ec2-54-215-252-159.us-west-1.compute.amazonaws.com,50000,50001
+ec2-54-215-252-174.us-west-1.compute.amazonaws.com,50000,50001

@@ -2,8 +2,11 @@ from persistence_stage import PersistenceStage
 from membership_stage import MembershipStage
 from external_request_stage import ExternalRequestStage
 from internal_request_stage import InternalRequestStage
+import asyncore
 import util
 import logging
+import sys
+import getopt
 
 class PynamoServer(object):
 
@@ -24,13 +27,33 @@ class PynamoServer(object):
         self._internal_request_stage = InternalRequestStage(server=self, hostname=hostname, internal_port=internal_port)
 
 
-        self._node_hash = util.get_hash("{}, {}, {}".format(hostname, str(external_port), str(internal_port)))
+        self._node_hash = util.get_hash("{},{},{}".format(hostname, str(external_port), str(internal_port)))
         self._terminator = "\r\n"
 
         self._external_shutdown_flag = False
         self._internal_shutdown_flag = False
 
         self.logger.debug('__init__ complete.')
+
+    @classmethod
+    def from_node_list(cls, node_file, self_dns_name):
+        node_addresses = []
+
+        with open(node_file, 'r') as f:
+            for line in f:
+                node_addresses.append(line)
+
+        for node_address in node_addresses:
+            public_dns_name, external_port, internal_port = line.split(',')
+            if public_dns_name == self_dns_name:
+                server = cls(   hostname=public_dns_name,
+                             external_port=int(external_port),
+                             internal_port=int(internal_port),
+                             node_addresses=node_addresses,
+                             wait_time=30)
+                return server
+
+        return None
 
     def process(self):
         """ Instructs processors to process requests.
@@ -93,7 +116,27 @@ class PynamoServer(object):
     def is_accepting_internal_requests(self):
         return not self._internal_shutdown_flag
 
+def main(argv):
+   try:
+      opts, args = getopt.getopt(argv,"hi:d:")
+   except getopt.GetoptError:
+      print 'test.py -i <nodelistfile> -d <public_dns_name>'
+      sys.exit(2)
+   for opt, arg in opts:
+      if opt == '-h':
+         print  'test.py -i <nodelistfile> -d <public_dns_name>'
+         sys.exit()
+      elif opt in ("-i"):
+         node_file = arg
+      elif opt in ("-d"):
+         self_dns_name = arg
 
+   server = PynamoServer.from_node_list(node_file=node_file, self_dns_name=self_dns_name)
 
+   while True:
+        asyncore.loop(timeout=0.001, count=1)
+        server.process()
 
+if __name__ == "__main__":
+    main(sys.argv[1:])
 
