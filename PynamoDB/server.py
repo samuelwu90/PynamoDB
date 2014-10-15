@@ -8,6 +8,11 @@ import logging
 import sys
 import getopt
 
+logging.basicConfig(filename='./logs/pynamo.log',
+                    level=logging.DEBUG,
+                    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+                    )
+
 class PynamoServer(object):
 
     def __init__(self, hostname, external_port, internal_port, node_addresses=None, wait_time=1, num_replicas=3):
@@ -41,11 +46,11 @@ class PynamoServer(object):
 
         with open(node_file, 'r') as f:
             for line in f:
-                node_addresses.append(line)
+                print line
+                node_addresses.append(line.strip())
 
         for node_address in node_addresses:
             public_dns_name, external_port, internal_port = node_address.split(',')
-            print public_dns_name, self_dns_name
             if public_dns_name == self_dns_name:
                 server = cls(   hostname=public_dns_name,
                              external_port=int(external_port),
