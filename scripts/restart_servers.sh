@@ -5,12 +5,11 @@ pem=~/.ssh/PynamoDB.pem
 while read line; do
     echo $line
     public_dns_name=$(echo $line | cut -d \, -f 1)
+    scp -o StrictHostKeyChecking=no -i $pem -r ~/git/PynamoDB/PynamoDB ubuntu@$public_dns_name:~/git/PynamoDB
 
     ssh -t -t -o StrictHostKeyChecking=no -i $pem ubuntu@$public_dns_name bash -c " '
     kill $(ps aux | grep python | awk '{print $2}')
     cd ~/git/PynamoDB
-
-    git pull
 
     mkdir -p ~/git/PynamoDB/logs
     rm ~/git/PynamoDB/*.log

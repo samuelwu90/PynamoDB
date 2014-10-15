@@ -46,13 +46,13 @@ class PynamoServer(object):
 
         with open(node_file, 'r') as f:
             for line in f:
-                print line
                 node_addresses.append(line.strip())
 
         for node_address in node_addresses:
             public_dns_name, external_port, internal_port = node_address.split(',')
             if public_dns_name == self_dns_name:
-                server = cls(   hostname=public_dns_name,
+                print '0.0.0.0', external_port, internal_port
+                server = cls(   hostname='0.0.0.0',
                              external_port=int(external_port),
                              internal_port=int(internal_port),
                              node_addresses=node_addresses,

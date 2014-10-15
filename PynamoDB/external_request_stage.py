@@ -9,8 +9,10 @@ class ExternalRequestStage(asyncore.dispatcher):
     """ Listens for external connections from clients and creates an ExternalChannel upon accepting."""
 
     def __init__(self, server=None, hostname=None, external_port=None):
+        print hostname, external_port
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
-        self.logger.debug('__init__')
+        self.logger.info('__init__')
+        self.logger.debug('__init__.  hostname, external_port: {}, {}'.format(hostname, external_port))
 
         # socket stuff
         asyncore.dispatcher.__init__(self)
