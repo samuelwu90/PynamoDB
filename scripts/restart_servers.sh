@@ -11,6 +11,7 @@ while read line; do
     cd ~/git/PynamoDB
     git pull
     server=~/git/PynamoDB/PynamoDB/server.py
+    node_list=~/git/PynamoDB/scripts/node_list.txt
     nohup python \$server -i \$node_list -d $public_dns_name &
     '" < /dev/null
 done < node_list.txt

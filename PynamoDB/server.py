@@ -45,6 +45,7 @@ class PynamoServer(object):
 
         for node_address in node_addresses:
             public_dns_name, external_port, internal_port = line.split(',')
+            print public_dns_name, self_dns_name
             if public_dns_name == self_dns_name:
                 server = cls(   hostname=public_dns_name,
                              external_port=int(external_port),
@@ -120,16 +121,18 @@ def main(argv):
     try:
       opts, args = getopt.getopt(argv,"hi:d:")
     except getopt.GetoptError:
-      print 'test.py -i <nodelistfile> -d <public_dns_name>'
+      print 'server.py -i <nodelistfile> -d <public_dns_name>'
       sys.exit(2)
     for opt, arg in opts:
       if opt == '-h':
-         print  'test.py -i <nodelistfile> -d <public_dns_name>'
+         print  'server.py -i <nodelistfile> -d <public_dns_name>'
          sys.exit()
       elif opt in ("-i"):
          node_file = arg
+         print node_file
       elif opt in ("-d"):
          self_dns_name = arg
+         print self_dns_name
 
     print "Starting server with node_file and dns_name: {}, {}".format(node_file, self_dns_name)
     server = PynamoServer.from_node_list(node_file=node_file, self_dns_name=self_dns_name)
