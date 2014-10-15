@@ -8,16 +8,16 @@ import logging
 import sys
 import getopt
 
-class PynamoServer(object):
-    def __init__(self, hostname, external_port, internal_port, node_addresses=None, wait_time=1, num_replicas=3):
-        logging.basicConfig(filename='./logs/pynamo.log',
+logging.basicConfig(filename='pynamo.log',
                 level=logging.DEBUG,
                 format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
                 )
 
+class PynamoServer(object):
+    def __init__(self, hostname, external_port, internal_port, node_addresses=None, wait_time=1, num_replicas=3):
+
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.info('__init__')
-
 
         self._num_replicas = num_replicas
         self._num_nodes = len(node_addresses)
@@ -142,6 +142,8 @@ def main(argv):
 
     print "Starting server with node_file and dns_name: {}, {}".format(node_file, self_dns_name)
     server = PynamoServer.from_node_list(node_file=node_file, self_dns_name=self_dns_name)
+    logger = logging.getLogger()
+    logger.info('BLEEHHHHHR')
     print "Starting server with node_file and dns_name: {}, {}".format(node_file, self_dns_name)
 
     while True:
