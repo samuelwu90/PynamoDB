@@ -117,12 +117,12 @@ class PynamoServer(object):
         return not self._internal_shutdown_flag
 
 def main(argv):
-   try:
+    try:
       opts, args = getopt.getopt(argv,"hi:d:")
-   except getopt.GetoptError:
+    except getopt.GetoptError:
       print 'test.py -i <nodelistfile> -d <public_dns_name>'
       sys.exit(2)
-   for opt, arg in opts:
+    for opt, arg in opts:
       if opt == '-h':
          print  'test.py -i <nodelistfile> -d <public_dns_name>'
          sys.exit()
@@ -131,9 +131,11 @@ def main(argv):
       elif opt in ("-d"):
          self_dns_name = arg
 
-   server = PynamoServer.from_node_list(node_file=node_file, self_dns_name=self_dns_name)
+    print "Starting server with node_file and dns_name: {}, {}".format(node_file, self_dns_name)
+    server = PynamoServer.from_node_list(node_file=node_file, self_dns_name=self_dns_name)
+    print "Starting server with node_file and dns_name: {}, {}".format(node_file, self_dns_name)
 
-   while True:
+    while True:
         asyncore.loop(timeout=0.001, count=1)
         server.process()
 
