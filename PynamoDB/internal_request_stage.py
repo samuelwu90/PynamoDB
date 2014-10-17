@@ -27,6 +27,11 @@ class InternalRequestStage(asyncore.dispatcher):
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.bind((hostname, int(internal_port)))
+        try:
+            self.bind((hostname, int(internal_port)))
+            self.logger.info('__init__.  successfully listening to {}:{}'.format(hostname, internal_port))
+        except:
+            self.logger.error('__init__.  unable to bind to {}:{}'.format(hostname, internal_port))
         self.listen(5)
 
         self.logger.debug('__init__ complete')
