@@ -19,6 +19,11 @@ class ExternalRequestStage(asyncore.dispatcher):
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.bind((hostname, int(external_port)))
+        try:
+            self.bind((hostname, int(external_port)))
+            self.logger.info('__init__.  successfully listening to {}:{}'.format(hostname, external_port))
+        except:
+            self.logger.error('__init__.  unable to bind to {}:{}'.format(hostname, external_port))
         self.listen(5)
 
         # protected properties
