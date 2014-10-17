@@ -59,9 +59,20 @@ class InternalRequestStage(asyncore.dispatcher):
 
     def process(self):
         self.logger.info('process')
+        to_be_removed = []
         for coordinator in self._coordinators:
             if coordinator.process():
+                to_be_removed.append(coordinator)
+        for coordinator in to_be_removed:
+            try:
+                for channel in coordinator._channels:
+                    try:
+                        channel.close_when_done()
+                    except:
+                        pass
                 self._coordinators.remove(coordinator)
+            except:
+                pass
 
     def handle_internal_message(self, message=None, reply_listener=None, internal_channel=None):
         """ Send request to node_hash and report back to listener"""
