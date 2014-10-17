@@ -5,15 +5,14 @@ import collections
 import pprint
 import random
 import bisect
+import sys
 
 class MembershipStage(object):
     """ Stage for managing ring membeship and failure detection."""
 
-    def __init__(self, server = None,  node_addresses=[], wait_time=1):
+    def __init__(self, server = None,  node_addresses=[], wait_time=30):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.debug('__init__')
-
-
 
         self._server = server
         self._wait_time = wait_time
@@ -39,39 +38,51 @@ class MembershipStage(object):
 
     @util.coroutine
     def _handle_membership_checks(self):
-        self.logger.info('_handle_membership_checks')
+        self.logger.debug('_handle_membership_checks')
         next_check_time = util.add_time(util.current_time(), self._wait_time)
 
         while True:
             # handle failures
-            for node_hash in self._failed_to_contact_node_hashes:
-                count = self._failed_to_contact_node_hashes[node_hash]['count']
-                if count >= 3:
-                    self._server.internal_request_stage.handle_unannounced_failure(failure_node_hash=node_hash)
-                    del self._failed_to_contact_node_hashes[node_hash]
-            # flush stale contact failures
-            for node_hash in self._failed_to_contact_node_hashes:
-                timeout = self._failed_to_contact_node_hashes[node_hash]['timeout']
-                if util.current_time() > timeout:
-                    del self._failed_to_contact_node_hashes[node_hash]
-            # retry contacting failure node hashes:
-            for node_hash in self._failed_to_contact_node_hashes:
-                if util.current_time() > self._failed_to_contact_node_hashes[node_hash]['timeout']:
-                    self._server.internal_request_stage.handle_membership_check(gossip_node_hash=node_hash)
+            try:
+                to_be_removed = []
+                for node_hash in self._failed_to_contact_node_hashes:
+                    count = self._failed_to_contact_node_hashes[node_hash]['count']
+                    if count >= 3:
+                        if node_hash in self.node_hashes:
+                            self._server.internal_request_stage.handle_unannounced_failure(failure_node_hash=node_hash)
+                        to_be_removed.append(node_hash)
+                # flush stale contact failures
+                for node_hash in self._failed_to_contact_node_hashes:
+                    timeout = self._failed_to_contact_node_hashes[node_hash]['timeout']
+                    if util.current_time() > timeout:
+                        to_be_removed.append(node_hash)
 
-            if util.current_time() > next_check_time:
-                self._server.internal_request_stage.handle_membership_check()
-                next_check_time = util.add_time(util.current_time(), 1)
-                yield
-            else:
-                yield
+                for node_hash in list(set(to_be_removed)):
+                    try:
+                        del self._failed_to_contact_node_hashes[node_hash]
+                    except:
+                        pass
+
+                # retry contacting failure node hashes:
+                for node_hash in self._failed_to_contact_node_hashes:
+                    if util.current_time() > self._failed_to_contact_node_hashes[node_hash]['timeout']:
+                        self._server.internal_request_stage.handle_membership_check(gossip_node_hash=node_hash)
+
+                if util.current_time() > next_check_time:
+                    self._server.internal_request_stage.handle_membership_check()
+                    next_check_time = util.add_time(util.current_time(), 1)
+                    yield
+                else:
+                    yield
+            except Exception as e:
+                self.logger.error('_handle_membership_checks error: {}, {}'.format(e, sys.exc_info()))
 
     def process(self):
         self.logger.debug('process')
         return self._processor.next()
 
     def report_contact_failure(self, node_hash=None):
-        self.logger.info('report_contact_failure')
+        self.logger.debug('report_contact_failure')
         try:
             self._failed_to_contact_node_hashes[node_hash]['count'] += 1
         except:
