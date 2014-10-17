@@ -57,6 +57,24 @@ class ExternalRequestStage(asyncore.dispatcher):
         self.logger.debug('process')
         for channel in self._channels:
             channel.process()
+        return self._processor.next()
+
+    @util.coroutine
+    def _request_handler(self):
+
+        yield
+        while True:
+            if self._server._external_shutdown_flag:
+                if not self._channels:
+                    self.handle_close()
+                    yield False
+
+            to_be_removed = []
+            for channel in self._channels:
+                if channel.process():
+                    to_be_removed.append(channel)
+
+            yield True
 
     def _immediate_shutdown(self):
         self.logger.debug('_immediate_shutdown')
