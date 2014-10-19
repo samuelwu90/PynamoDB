@@ -9,12 +9,23 @@ import random
 import sys
 
 class InternalRequestStage(asyncore.dispatcher):
+    """
+    Listens for internal connections from other nodes and creates an InternalChannel upon accepting.
+    """
 
-    """ Listens for external connections from other nodes and creates an InternalChannel upon accepting."""
-
-    def __init__(self, server, hostname, internal_port):
+    def __init__(self, server=None, internal_port=None, hostname="0.0.0.0"):
+        """
+        Parameters
+        ----------
+        server : PynamoServer object.
+            object through which internal stages can be accessed.
+        internal_port : str or int
+            port on which server will be listening for internal communications.
+        hostname : str
+            public dns name through which server will be contacted.
+        """
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
-        self.logger.info('__init__')
+        self.logger.debug('__init__')
 
         self._server = server
         self._hostname = hostname
@@ -26,7 +37,6 @@ class InternalRequestStage(asyncore.dispatcher):
         asyncore.dispatcher.__init__(self)
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.bind((hostname, int(internal_port)))
         try:
             self.bind((hostname, int(internal_port)))
             self.logger.info('__init__.  successfully listening to {}:{}'.format(hostname, internal_port))
@@ -37,10 +47,16 @@ class InternalRequestStage(asyncore.dispatcher):
         self.logger.debug('__init__ complete')
 
     def handle_error(self):
+        """
+        Implements asyncore.dispatcher's handle_error method.
+        """
         self.logger.error('handle_error')
 
     def handle_accept(self):
-        self.logger.info('handle_accept')
+        """
+        Implements asyncore.dispatcher's handle_accept method.
+        """
+        self.logger.debug('handle_accept')
         if self._server.is_accepting_internal_requests:
             sock, client_address = self.accept()
             internal_channel = InternalChannel(server=self._server, sock=sock, client_address=client_address)
@@ -48,7 +64,10 @@ class InternalRequestStage(asyncore.dispatcher):
             self.logger.debug('handle_accept.  accepting connection from: {}'.format(client_address))
 
     def handle_close(self):
-        self.logger.info('handle_close')
+        """
+        Implements asyncore.dispatcher's handle_close method.
+        """
+        self.logger.debug('handle_close')
         for channel in self._channels:
             channel.close_when_done()
         for coordinator in self._coordinators:
@@ -58,7 +77,12 @@ class InternalRequestStage(asyncore.dispatcher):
         self.logger.debug('handle_close.  channels and self closed')
 
     def process(self):
-        self.logger.info('process')
+        """
+        Steps processor coroutine through next cycle.
+
+        Closes and removes finished InternalRequestCoordinators.
+        """
+        self.logger.debug('process')
         to_be_removed = []
         for coordinator in self._coordinators:
             if coordinator.process():
@@ -75,38 +99,50 @@ class InternalRequestStage(asyncore.dispatcher):
                 pass
 
     def handle_internal_message(self, message=None, reply_listener=None, internal_channel=None):
-        """ Send request to node_hash and report back to listener"""
+        """
+        Send request to node_hash and report back to listener
+        """
         self.logger.debug('handle_internal_message.')
         coordinator = InternalRequestCoordinator(server=self._server, message=message, reply_listener=reply_listener, internal_channel=internal_channel)
         self._coordinators.append(coordinator)
         self.logger.debug('handle_internal_message. coordinator appended.')
 
     def handle_membership_check(self, gossip_node_hash=None):
-        self.logger.info('handle_membership_check')
+        """
+        Instantiates InternalRequestCoordinator for reconciling membership information with another node.
+        """
+        self.logger.debug('handle_membership_check')
         coordinator = InternalRequestCoordinator(server=self._server, timeout=1)
         coordinator._handle_membership_check(gossip_node_hash=gossip_node_hash)
         self._coordinators.append(coordinator)
 
     def handle_unannounced_failure(self, failure_node_hash=None):
-        self.logger.info('handle_unannounced_failure')
+        """
+        Instantiates InternalRequestCoordinator for communicating unannounced failures to other nodes.
+        """
+        self.logger.debug('handle_unannounced_failure')
         self.logger.debug('handle_unannounced_failure.  failure_node_hash: {}'.format(failure_node_hash))
         coordinator = InternalRequestCoordinator(server=self._server)
         try:
             coordinator._handle_unannounced_failure(failure_node_hash=failure_node_hash)
-        except Exception as e:
-            print e
-            print sys.exc_info()
+        except:
+            pass
         self._coordinators.append(coordinator)
 
     def _immediate_shutdown(self):
+        """
+        Handles shutdown immediately.
+        """
         self.handle_close()
 
 class InternalChannel(asynchat.async_chat):
-    """ Handles receiving requests from other nodes """
+    """
+    asyncore channel that handles internal communication with another node.
+    """
 
     def __init__(self, server=None, sock=None, client_address=None, node_hash=None, coordinator_listener=None):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
-        self.logger.info('__init__')
+        self.logger.debug('__init__')
 
         self._server = server
         self._node_hash = node_hash
@@ -131,36 +167,36 @@ class InternalChannel(asynchat.async_chat):
         self.logger.debug('__init__ complete')
 
     def collect_incoming_data(self, data):
-        self.logger.info('collect_incoming_data')
+        self.logger.debug('collect_incoming_data')
         self._read_buffer.append(data)
 
     def found_terminator(self):
-        self.logger.info('found_terminator')
+        self.logger.debug('found_terminator')
         message = json.loads(''.join(self._read_buffer))
         self._read_buffer = []
         self._process_message(message=message, internal_channel=self)
 
     def handle_error(self):
-        self.logger.info('handle_error')
-        self.logger.error('handle_error. {}'.format(sys.exc_info()))
+        self.logger.debug('handle_error')
+        self.logger.debug('handle_error. {}'.format(sys.exc_info()))
         try:
-            self._coordinator_listener.send({'type': 'reply', 'node_hash': self._node_hash, 'error_code': '\x10'})
+            self._server.membership_stage.report_contact_failure(node_hash=self._node_hash)
         except:
             pass
         self.close_when_done()
 
     def _send_message(self, message):
-        self.logger.info('_send_message')
+        self.logger.debug('_send_message')
         self.push(util.pack_message(message, self._server._terminator))
         self.logger.debug('_send_message.  message sent')
 
     def _send_gossip(self, message, propagation_probability=0.5):
-        self.logger.info('_send_gossip')
+        self.logger.debug('_send_gossip')
         if random.random() > propagation_probability:
             self._send_message(message)
 
     def _process_message(self, message=None, internal_channel=None):
-        self.logger.info('_process_message')
+        self.logger.debug('_process_message')
         self.logger.debug('_process_message.  node_hash: {}'.format(self._server.node_hash))
 
         if message['type'] == 'reply':
@@ -175,7 +211,7 @@ class InternalRequestCoordinator(object):
 
     def __init__(self, server=None, message=None, reply_listener=None, internal_channel=None, timeout=1000000, max_retries=3):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
-        self.logger.info('__init__')
+        self.logger.debug('__init__')
         self.logger.debug('__init__.  node_hash: {}'.format(server.node_hash))
 
         self._server = server
@@ -231,7 +267,7 @@ class InternalRequestCoordinator(object):
 
     @util.coroutine
     def _request_handler(self, message=None, reply_listener=None, internal_channel=None):
-        self.logger.info('_request_handler')
+        self.logger.debug('_request_handler')
         self.logger.debug('_request_handler')
         if not message:
             pass
@@ -256,7 +292,9 @@ class InternalRequestCoordinator(object):
             elif message['command'] == 'shutdown':
                 reply = {'error_code': '\x00'}
                 reply_listener.send(reply)
+                self._server._external_shutdown_flag = True
                 self._handle_announced_failure_repair()
+                self.logger.info('shutdown command received.  server flagged and repair performed.')
 
         elif message['type'] == 'internal request':
             self.logger.debug('_request_handler.  handling internal {} command'.format(message['command']))
@@ -286,10 +324,15 @@ class InternalRequestCoordinator(object):
             internal_channel.close_when_done()
 
         while True:
-            if self.timed_out and not self.complete:
-                self._handle_timeout()
-            else:
-                yield self.complete
+            try:
+                # if self.timed_out and not self.complete:
+                #     self._handle_timeout()
+                #     yield self.complete
+                # else:
+                    yield self.complete
+            except:
+                pass
+
 
     def _process_replies(self, message, replies):
         """ Process replies when listener has received
@@ -334,9 +377,9 @@ class InternalRequestCoordinator(object):
                     new_membership_view = set(reply['hash_ring'])
                     for node_hash in list(old_membership_view - new_membership_view):
                         self._server.membership_stage.remove_node_hash(node_hash)
-                elif reply['error_code'] == '\x10':
-                    self.logger.debug('_process_replies.  reporting failure: {}'.format(reply['node_hash']))
-                    self._server.membership_stage.report_contact_failure(node_hash=reply['node_hash'])
+                # elif reply['error_code'] == '\x10':
+                #     self.logger.debug('_process_replies.  reporting failure: {}'.format(reply['node_hash']))
+                #     self._server.membership_stage.report_contact_failure(node_hash=reply['node_hash'])
 
         except:
             pass
@@ -357,7 +400,7 @@ class InternalRequestCoordinator(object):
         self.logger.debug('_handle_request_locally.  returning reply: {}'.format(reply))
 
     def _handle_request_remotely(self, request, node_hash):
-        self.logger.info('_handle_request_remotely')
+        self.logger.debug('_handle_request_remotely')
         try:
             internal_channel = InternalChannel(server=self._server, node_hash=node_hash, coordinator_listener=self._coordinator_listener)
             self.logger.debug('_handle_request_remotely.  created internal channel.')
@@ -369,7 +412,7 @@ class InternalRequestCoordinator(object):
             pass
 
     def _handle_announced_failure_repair(self):
-        self.logger.info('_handle_announced_failure_repair')
+        self.logger.debug('_handle_announced_failure_repair')
         self._server._external_shutdown_flag = True
 
         # remove self from hash ring
@@ -414,7 +457,7 @@ class InternalRequestCoordinator(object):
         self._server.membership_stage.remove_node_hash(failure_node_hash)
 
     def _handle_membership_check(self, gossip_node_hash=None):
-        self.logger.info('_handle_membership_check')
+        self.logger.debug('_handle_membership_check')
         message = {
             'type': 'membership',
             'info': 'membership check',
@@ -457,7 +500,7 @@ class InternalRequestCoordinator(object):
             internal_channel._send_message(message=message)
 
     def _handle_announced_failure_message(self, message):
-        self.logger.info('_handle_announced_failure_message')
+        self.logger.debug('_handle_announced_failure_message')
         if message['partition']:
             self.logger.debug('_handle_announced_failure.  received partition: {}'.format(message['partition']))
             partition = message['partition']
@@ -492,7 +535,7 @@ class InternalRequestCoordinator(object):
         return reply
 
     def _handle_unannounced_failure_message(self, message):
-        self.logger.info('_handle_unannounced_failure')
+        self.logger.info('_handle_unannounced_failure_message')
 
         failure_node_hash = message['node_hash']
 
@@ -506,27 +549,25 @@ class InternalRequestCoordinator(object):
             message['partition'] = None
 
         # check if failed node hash is present.  if so, partition before removing it.
-        unannounced_repair_node_hashes = self._server.membership_stage.get_unannounced_failure_repair_node_hashes(failure_node_hash=failure_node_hash)
-        responsible_for_repair = self._server.node_hash in unannounced_repair_node_hashes
-        repair_not_yet_performed = failure_node_hash in self._server.membership_stage.node_hashes
+        if failure_node_hash in self._server.membership_stage.node_hashes:
+            unannounced_repair_node_hashes = self._server.membership_stage.get_unannounced_failure_repair_node_hashes(failure_node_hash=failure_node_hash)
+            responsible_for_repair = self._server.node_hash in unannounced_repair_node_hashes
 
-        if responsible_for_repair and repair_not_yet_performed:
-            self._handle_unannounced_failure_repair(failure_node_hash=failure_node_hash)
+            if responsible_for_repair:
+                self._handle_unannounced_failure_repair(failure_node_hash=failure_node_hash)
+            propagation_probability = 1.0
+            self._server.membership_stage.remove_node_hash(failure_node_hash)
         else:
-            node_hash_already_removed = not self._server.membership_stage.remove_node_hash(message['node_hash'])
-            if node_hash_already_removed:
-                propagation_decay_factor = util.get_gossip_decay_factor(self._server.num_nodes, self._server.num_replicas)
-                propagation_probability =propagation_decay_factor
-            else:
-                propagation_probability = 1.0
+            propagation_decay_factor = util.get_gossip_decay_factor(self._server.num_nodes, self._server.num_replicas)
+            propagation_probability =propagation_decay_factor
 
-            gossip_message = {
-                'type' : 'gossip',
-                'contents': message,
-                'propagation_probability': propagation_probability
-            }
+        gossip_message = {
+            'type' : 'gossip',
+            'contents': message,
+            'propagation_probability': propagation_probability
+        }
 
-            self._server.internal_request_stage.handle_internal_message(message=gossip_message)
+        self._server.internal_request_stage.handle_internal_message(message=gossip_message)
 
         reply = {
                     'type': 'reply',
@@ -537,7 +578,7 @@ class InternalRequestCoordinator(object):
         return reply
 
     def _handle_gossip(self, message=None):
-        self.logger.info('_handle_gossip')
+        self.logger.debug('_handle_gossip')
         self.logger.debug('_handle_gossip.  node_hash: {}'.format(self._server .node_hash))
         contents = message['contents']
         propagation_probability = message['propagation_probability']
@@ -568,7 +609,7 @@ class InternalRequestCoordinator(object):
                 self._coordinator_listener.send(reply)
 
     def _handle_membership_message(self, message=None):
-        self.logger.info('_handle_membership_message')
+        self.logger.debug('_handle_membership_message')
         old_membership_view = set(self._server.membership_stage.node_hashes)
         new_membership_view = set(message['hash ring']).intersection(old_membership_view)
         for node_hash in list(old_membership_view - new_membership_view):
@@ -586,22 +627,23 @@ class InternalRequestCoordinator(object):
 ###
 
     def _handle_timeout(self):
-        """  Retries requests up to _max_num_tries, then considers
         """
-        self.logger.info('_handle_timeout')
+        Retries requests up to _max_num_tries
+        """
+        self.logger.debug('_handle_timeout')
 
         for channel in self._channels:
             channel.close_when_done()
             self._channels.remove(channel)
 
-        for node_hash, reply in self._replies:
-            if not reply:
-                if (self._retries[node_hash] < self._max_retries):
-                    self._retries[node_hash] += 1
-                    self._handle_request_remotely(self._message, node_hash)
-                else:
-                    print "Unannounced failure!"
-                    pass
-                    # self._server._handle_unannounced_failure(node_hash)
-            else:
-                self._coordinator_listener.send(reply)
+        # for node_hash, reply in self._replies:
+        #     if not reply:
+        #         if (self._retries[node_hash] < self._max_retries):
+        #             self._retries[node_hash] += 1
+        #             self._handle_request_remotely(self._message, node_hash)
+        #         else:
+        #             self.complete = True
+        #             pass
+        #             # self._server._handle_unannounced_failure(node_hash)
+        #     else:
+        #         self._coordinator_listener.send(reply)

@@ -51,8 +51,8 @@ class ConsistentHashRing(object):
             Example:
                 for nodes [ 'A', 'B', 'C', 'D' ] and key 'AA', [ 'B', 'C', 'D' ] would be returned.
         """
-        self.logger.info('get_responsible_node_hashes')
-        self.logger.info('get_responsible_node_hashes.  key_hash, num_replicas: {}, {}'.format(key_hash, self.num_replicas))
+        self.logger.debug('get_responsible_node_hashes')
+        self.logger.debug('get_responsible_node_hashes.  key_hash, num_replicas: {}, {}'.format(key_hash, self.num_replicas))
 
         if self.hash_ring and key_hash:
             primary_position = bisect.bisect_left(self.hash_ring, key_hash)

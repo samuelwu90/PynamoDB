@@ -1,20 +1,23 @@
+import logging
+logging.basicConfig(filename='pynamo.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+                    )
+
 from persistence_stage import PersistenceStage
 from membership_stage import MembershipStage
 from external_request_stage import ExternalRequestStage
 from internal_request_stage import InternalRequestStage
 import asyncore
 import util
-import logging
+
 import sys
 import getopt
 
-logging.basicConfig(filename='pynamo.log',
-                level=logging.DEBUG,
-                format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
-                )
+
 
 class PynamoServer(object):
-    def __init__(self, hostname, external_port, internal_port, node_addresses=None, wait_time=1, num_replicas=3):
+    def __init__(self, hostname, external_port, internal_port, public_dns_name=None, node_addresses=None, wait_time=30, num_replicas=3):
 
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.info('__init__')
@@ -25,6 +28,7 @@ class PynamoServer(object):
         self.hostname = hostname
         self.external_port = external_port
         self.internal_port = internal_port
+        self.public_dns_name = public_dns_name
 
         self._persistence_stage = PersistenceStage(server=self)
         self._membership_stage = MembershipStage(server=self, node_addresses=node_addresses, wait_time=wait_time)
@@ -32,7 +36,7 @@ class PynamoServer(object):
         self._internal_request_stage = InternalRequestStage(server=self, hostname=hostname, internal_port=internal_port)
 
 
-        self._node_hash = util.get_hash("{},{},{}".format(hostname, str(external_port), str(internal_port)))
+        self._node_hash = util.get_hash("{},{},{}".format(public_dns_name, str(external_port), str(internal_port)))
         self._terminator = "\r\n"
 
         self._external_shutdown_flag = False
@@ -41,7 +45,7 @@ class PynamoServer(object):
         self.logger.debug('__init__ complete.')
 
     @classmethod
-    def from_node_list(cls, node_file, self_dns_name):
+    def from_node_list(cls, node_file, self_dns_name, wait_time):
         node_addresses = []
 
         with open(node_file, 'r') as f:
@@ -53,10 +57,11 @@ class PynamoServer(object):
             if public_dns_name == self_dns_name:
                 print '0.0.0.0', external_port, internal_port
                 server = cls(   hostname='0.0.0.0',
+                             public_dns_name=self_dns_name,
                              external_port=int(external_port),
                              internal_port=int(internal_port),
                              node_addresses=node_addresses,
-                             wait_time=30)
+                             wait_time=int(wait_time))
                 return server
 
         return None
@@ -68,20 +73,20 @@ class PynamoServer(object):
         try:
             self.internal_request_stage.process()
         except:
-            self.logger.error('internal_request_stage .process() error.')
+            self.logger.error('internal_request_stage .process() error, {}.'.format(sys.exc_info()))
 
         try:
             self.external_request_stage.process()
         except:
-            self.logger.error('external_request_stage .process() error.')
+            self.logger.error('external_request_stage .process() error, {}.'.format(sys.exc_info()))
 
         try:
             self.membership_stage.process()
         except:
-            self.logger.error('membership_stage .process() error.')
+            self.logger.error('membership_stage .process() error, {}.'.format(sys.exc_info()))
 
     def _immediate_shutdown(self):
-        self.logger.info('_immediate_shutdown')
+        self.logger.debug('_immediate_shutdown')
         self.internal_request_stage._immediate_shutdown()
         self.external_request_stage._immediate_shutdown()
 
@@ -125,26 +130,22 @@ class PynamoServer(object):
 def main(argv):
 
     try:
-      opts, args = getopt.getopt(argv,"hi:d:")
+      opts, args = getopt.getopt(argv,"hi:d:w:")
     except getopt.GetoptError:
-      print 'server.py -i <nodelistfile> -d <public_dns_name>'
+      print 'server.py -i <nodelistfile> -d <public_dns_name> -w <wait_time>'
       sys.exit(2)
     for opt, arg in opts:
       if opt == '-h':
-         print  'server.py -i <nodelistfile> -d <public_dns_name>'
+         print  'server.py -i <nodelistfile> -d <public_dns_name> -w <wait_time>'
          sys.exit()
       elif opt in ("-i"):
          node_file = arg
-         print node_file
       elif opt in ("-d"):
          self_dns_name = arg
-         print self_dns_name
+      elif opt in ("-w"):
+        wait_time = int(arg)
 
-    print "Starting server with node_file and dns_name: {}, {}".format(node_file, self_dns_name)
-    server = PynamoServer.from_node_list(node_file=node_file, self_dns_name=self_dns_name)
-    logger = logging.getLogger()
-    logger.info('BLEEHHHHHR')
-    print "Starting server with node_file and dns_name: {}, {}".format(node_file, self_dns_name)
+    server = PynamoServer.from_node_list(node_file=node_file, self_dns_name=self_dns_name, wait_time=wait_time)
 
     while True:
         try:

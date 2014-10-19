@@ -4,6 +4,7 @@ import socket
 import json
 import util
 import logging
+import sys
 
 class PynamoClient(asynchat.async_chat):
 
@@ -25,7 +26,7 @@ class PynamoClient(asynchat.async_chat):
 
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            self.connect((host, port))
+            self.connect((host, int(port)))
         except:
             self.logger.error('__init__.  connection refused.')
 
@@ -38,19 +39,19 @@ class PynamoClient(asynchat.async_chat):
         return self._replies
 
     def _immediate_shutdown(self):
-        self.logger.info('_immediate_shutdown')
+        self.logger.debug('_immediate_shutdown')
         self.close_when_done()
 
     def handle_error(self):
         print sys.exc_info()
 
     def send_message(self, message):
-        self.logger.info('send_message')
+        self.logger.debug('send_message')
         self.logger.debug('send_message.  message: {}'.format(message))
         self.push(util.pack_message(message, self.terminator))
 
     def put(self, key, value):
-        self.logger.info('put')
+        self.logger.debug('put')
         message = {
             'command' : 'put',
             'key' : key,
@@ -60,7 +61,7 @@ class PynamoClient(asynchat.async_chat):
         self.send_message(message)
 
     def get(self, key):
-        self.logger.info('get')
+        self.logger.debug('get')
         message = {
             'command' : 'get',
             'key' : key
@@ -69,7 +70,7 @@ class PynamoClient(asynchat.async_chat):
         self.send_message(message)
 
     def delete(self, key):
-        self.logger.info('delete')
+        self.logger.debug('delete')
         message = {
             'command' : 'delete',
             'key' : key
@@ -78,7 +79,7 @@ class PynamoClient(asynchat.async_chat):
         self.send_message(message)
 
     def shutdown(self):
-        self.logger.info('shutdown')
+        self.logger.debug('shutdown')
         message = {
             'command' : 'shutdown'
         }
@@ -86,12 +87,12 @@ class PynamoClient(asynchat.async_chat):
         self.send_message(message)
 
     def collect_incoming_data(self, data):
-        self.logger.info('collect_incoming_data')
+        self.logger.debug('collect_incoming_data')
         self.logger.debug('collect_incoming_data.  data: {}'.format(data))
         self._read_buffer.append(data)
 
     def found_terminator(self):
-        self.logger.info('found_terminator')
+        self.logger.debug('found_terminator')
         reply = json.loads(''.join(self._read_buffer))
         self._read_buffer = []
         self._handle_reply(reply)
