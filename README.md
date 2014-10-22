@@ -13,5 +13,6 @@ But if you'd like to run a simulation of rolling failures as of now, you'll have
 
 To-do:
 ========
+0. clean up interfaces between stages.
 0. clean up the fabfile.
 0. package up project for pip.
