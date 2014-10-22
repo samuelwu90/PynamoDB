@@ -3,7 +3,9 @@ import util
 from persistence_engine import PersistenceEngine
 
 class PersistenceStage(object):
-    """ Stage for managing key-value persistence."""
+    """
+    Stage for managing key-value persistence.
+    """
 
     def __init__(self, server=None):
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
@@ -13,14 +15,19 @@ class PersistenceStage(object):
         self._persistence_engine = PersistenceEngine()
 
     def keys(self):
+    """
+    Returns:
+        list of keys present in the persistence engine.
+    """
         return self._persistence_engine.keys()
 
     def put(self, key, value, timestamp=None):
-        """ Returns:
-                error code \x00 if put is successful
-                error code \x06 if unknown error is encountered
+        """
+        Compares timestamps of old and new values if key is already present in hash ring.
 
-            Compares timestamps of old and new values if key is already present in hash ring
+        Returns:
+            error code \x00 if put is successful
+            error code \x06 if unknown error is encountered
         """
 
         self.logger.debug('put')
@@ -50,10 +57,11 @@ class PersistenceStage(object):
 
 
     def get(self, key):
-        """ Returns:
-                (error code \x00, value) if get is successful
-                (error code \x01, None) if key inexistant
-                (error code \x06, None) if unknown error is encountered
+        """
+        Returns:
+            (error code \x00, value) if get is successful
+            (error code \x01, None) if key inexistant
+            (error code \x06, None) if unknown error is encountered
         """
 
         self.logger.debug('get')
@@ -77,10 +85,11 @@ class PersistenceStage(object):
             return reply
 
     def delete(self, key):
-        """ Returns:
-                error code \x00 if delete is successful
-                error code \x01 if key inexistant
-                error code \x06 if unknown error is encountered
+        """
+        Returns:
+            error code \x00 if delete is successful
+            error code \x01 if key inexistant
+            error code \x06 if unknown error is encountered
         """
 
         self.logger.debug('delete')

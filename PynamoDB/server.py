@@ -1,40 +1,68 @@
+import asyncore
+import getopt
 import logging
-logging.basicConfig(filename='pynamo.log',
-                    level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
-                    )
+import sys
+import util
 
 from persistence_stage import PersistenceStage
 from membership_stage import MembershipStage
 from external_request_stage import ExternalRequestStage
 from internal_request_stage import InternalRequestStage
-import asyncore
-import util
 
-import sys
-import getopt
-
-
+logging.basicConfig(filename='pynamo.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+                    )
 
 class PynamoServer(object):
-    def __init__(self, hostname, external_port, internal_port, public_dns_name=None, node_addresses=None, wait_time=30, num_replicas=3):
+    """
+    PynamoDB server that manages request/membership/persistence stages.
+        -alternates between asyncore.loop polling of channels and server.process polling of server stages.
 
+    Attributes:
+    ----------
+    persistence_stage (PersistenceStage):
+        implements get/put/delete.
+    membership_stage (MembershipStage):
+        handles membership info/checks, partitions keyspace upon failure.
+    external_request_stage (ExternalRequestStage):
+        handles communications with clients.
+    internal_request_stage (InternalRequestStage):
+        handles communications with other nodes.
+    """
+
+    def __init__(self, hostname, external_port, internal_port, public_dns_name, node_addresses, wait_time=30, num_replicas=3):
+         """
+        Args:
+        ----------
+        hostname (str):
+            address to which listening ports will be bound.
+        external_port (str or int):
+            listening port for external communications.
+        internal_port (str or int):
+            listening port for internal communications.
+        public_dns_name (str):
+            used for determining node hash.
+        node_addresses (list of str):
+            list of every node in the system in the format 'hostname,external_port,internal_port'
+        wait_time(int, optional):
+            number of seconds before internal nodes start communicating with each other, defaults to 30s.
+        num_replicas(int, optional):
+            number of replicas for each key-value pair, defaults to 3.
+        """
         self.logger = logging.getLogger('{}'.format(self.__class__.__name__))
         self.logger.info('__init__')
 
         self._num_replicas = num_replicas
-        self._num_nodes = len(node_addresses)
 
         self.hostname = hostname
         self.external_port = external_port
         self.internal_port = internal_port
-        self.public_dns_name = public_dns_name
 
         self._persistence_stage = PersistenceStage(server=self)
         self._membership_stage = MembershipStage(server=self, node_addresses=node_addresses, wait_time=wait_time)
         self._external_request_stage = ExternalRequestStage(server=self, hostname=hostname, external_port=external_port)
         self._internal_request_stage = InternalRequestStage(server=self, hostname=hostname, internal_port=internal_port)
-
 
         self._node_hash = util.get_hash("{},{},{}".format(public_dns_name, str(external_port), str(internal_port)))
         self._terminator = "\r\n"
@@ -46,29 +74,45 @@ class PynamoServer(object):
 
     @classmethod
     def from_node_list(cls, node_file, self_dns_name, wait_time):
-        node_addresses = []
+         """
+        Constructor from node list with format:
+            'public_dns_name, external_port, internal_port'
 
-        with open(node_file, 'r') as f:
-            for line in f:
-                node_addresses.append(line.strip())
+        Args:
+            node_file (str) : path to node file.
+            self_dns_name (str) : own public dns name.
+            wait_time(int): number of seconds before internal nodes start communicating with each other, defaults to 30s.
 
-        for node_address in node_addresses:
-            public_dns_name, external_port, internal_port = node_address.split(',')
-            if public_dns_name == self_dns_name:
-                print '0.0.0.0', external_port, internal_port
-                server = cls(   hostname='0.0.0.0',
-                             public_dns_name=self_dns_name,
-                             external_port=int(external_port),
-                             internal_port=int(internal_port),
-                             node_addresses=node_addresses,
-                             wait_time=int(wait_time))
-                return server
+        Returns:
+            True if successful, False otherwise.
+        """
+        try:
+            node_addresses = []
 
-        return None
+            with open(node_file, 'r') as f:
+                for line in f:
+                    node_addresses.append(line.strip())
+
+            for node_address in node_addresses:
+                public_dns_name, external_port, internal_port = node_address.split(',')
+                if public_dns_name == self_dns_name:
+                    print '0.0.0.0', external_port, internal_port
+                    server = cls(   hostname='0.0.0.0',
+                                 public_dns_name=self_dns_name,
+                                 external_port=int(external_port),
+                                 internal_port=int(internal_port),
+                                 node_addresses=node_addresses,
+                                 wait_time=int(wait_time))
+                    return server
+
+            return True
+        except:
+            return False
 
     def process(self):
-        """ Instructs processors to process requests.
-            Called after each asynchronous loop.
+        """
+        Instructs processors to process requests.
+                Called after each asynchronous loop.
         """
         try:
             self.internal_request_stage.process()
@@ -86,6 +130,9 @@ class PynamoServer(object):
             self.logger.error('membership_stage .process() error, {}.'.format(sys.exc_info()))
 
     def _immediate_shutdown(self):
+        """
+        Instructs ExternalRequestStage and InternalRequestStage to immediately stop listening.
+        """
         self.logger.debug('_immediate_shutdown')
         self.internal_request_stage._immediate_shutdown()
         self.external_request_stage._immediate_shutdown()
@@ -128,7 +175,6 @@ class PynamoServer(object):
         return not self._internal_shutdown_flag
 
 def main(argv):
-
     try:
       opts, args = getopt.getopt(argv,"hi:d:w:")
     except getopt.GetoptError:

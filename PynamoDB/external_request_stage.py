@@ -12,7 +12,7 @@ class ExternalRequestStage(asyncore.dispatcher):
 
     def __init__(self, server=None, external_port=None, hostname="0.0.0.0"):
         """
-        Parameters
+        Args
         ----------
         server : PynamoServer object.
             object through which internal stages can be accessed.
@@ -63,8 +63,7 @@ class ExternalRequestStage(asyncore.dispatcher):
     def handle_close(self):
         """
         Implements asyncore.dispatcher's handle_accept method.
-
-        Closes each asynchat channel and then closes self.
+            -closes each asynchat channel and then closes self.
         """
         self.logger.debug('handle_close')
         for channel in self._channels:
@@ -89,8 +88,7 @@ class ExternalRequestStage(asyncore.dispatcher):
 
         while True:
 
-            # handle shtu
-            if self._server._external_shutdown_flag:
+            if self._server._external_shutdown_flag:     # if flagged for shutdown, handle closing of self.
                 if not self._channels:
                     self.handle_close()
                     yield False
@@ -99,6 +97,8 @@ class ExternalRequestStage(asyncore.dispatcher):
             for channel in self._channels:
                 if channel.process():
                     to_be_removed.append(channel)
+
+            # implement channel removal here
 
             yield True
 
@@ -115,7 +115,7 @@ class ExternalChannel(asynchat.async_chat):
     """
     def __init__(self, server=None, sock=None):
         """
-        Parameters
+        Args:
         ----------
         server : PynamoServer
             object through which internal stages can be accessed.
@@ -138,10 +138,9 @@ class ExternalChannel(asynchat.async_chat):
     def collect_incoming_data(self, data):
          """
         Implements asynchat.async_chat's collect_incoming_data method.
+            -appends data to internal read buffer.
 
-        Appends data to internal read buffer.
-
-        Parameters
+        Args:
         ----------
         data : str
             incoming data read by the async_chat channel.
@@ -154,10 +153,10 @@ class ExternalChannel(asynchat.async_chat):
     def found_terminator(self):
         """
         Implements asynchat.async_chat's found_terminator method.
+            - handler for when message's terminator is found.
+            - the message is converted into a json object, the read buffer flushed, and the message passed to a message handler.
 
-        Handler for when message's terminator is found.  The message is converted into a json object, the read buffer flushed, and the message passed to a message handler.
-
-        Parameters
+        Args:
         ----------
         data : str
             incoming data read by the async_chat channel.
@@ -170,8 +169,12 @@ class ExternalChannel(asynchat.async_chat):
     def _process_message(self, request):
         """
         Handles request messages passed from async_chat's found_terminator handler.
+            -marks message as 'exteral request' and gives it a timestamp.  Hashes key before passing the request internally by instantiating an ExternalRequestCoordinator.
 
-        Marks message as 'exteral request' and gives it a timestamp.  Hashes key before passing the request internally by instantiating an ExternalRequestCoordinator.
+        Args:
+        ----------
+        request : JSON
+            incoming request object.
         """
         self.logger.debug('_request_handler.')
 
@@ -231,7 +234,7 @@ class ExternalRequestCoordinator(object):
 
     def __init__(self, server=None, request=None):
         """
-        Parameters
+        Args:
         ----------
         server : PynamoServer object.
             object through which internal stages can be accessed.

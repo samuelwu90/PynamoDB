@@ -11,6 +11,7 @@ import sys
 class InternalRequestStage(asyncore.dispatcher):
     """
     Listens for internal connections from other nodes and creates an InternalChannel upon accepting.
+    ----------
     """
 
     def __init__(self, server=None, internal_port=None, hostname="0.0.0.0"):
@@ -79,8 +80,8 @@ class InternalRequestStage(asyncore.dispatcher):
     def process(self):
         """
         Steps processor coroutine through next cycle.
-
-        Closes and removes finished InternalRequestCoordinators.
+        ----------
+            -closes and removes finished InternalRequestCoordinators.
         """
         self.logger.debug('process')
         to_be_removed = []
@@ -236,18 +237,32 @@ class InternalRequestCoordinator(object):
         self._processor = self._request_handler(message=message, reply_listener=reply_listener, internal_channel=internal_channel)
 
     def process(self):
-        """ returns:
-                True if completed
-                False if still handling
+        """
+        Returns:
+        ----------
+            True if request is completed.
+            False if still handling.
         """
         return self._processor.next()
 
     @property
     def timed_out(self):
+        """
+        Returns:
+        ----------
+            True if self has timed out i.e. current time is past the set timeout time.
+            False otherwise.
+        """
         return util.current_time() > self._timeout
 
     @property
     def complete(self):
+        """
+        Returns:
+        ----------
+            True if the request the coordinator is responsible for has completed.
+            False otherwise.
+        """
         return self._complete
 
     @util.coroutine
@@ -332,7 +347,6 @@ class InternalRequestCoordinator(object):
                     yield self.complete
             except:
                 pass
-
 
     def _process_replies(self, message, replies):
         """ Process replies when listener has received
@@ -624,7 +638,6 @@ class InternalRequestCoordinator(object):
         }
 
         return reply
-###
 
     def _handle_timeout(self):
         """
@@ -635,15 +648,3 @@ class InternalRequestCoordinator(object):
         for channel in self._channels:
             channel.close_when_done()
             self._channels.remove(channel)
-
-        # for node_hash, reply in self._replies:
-        #     if not reply:
-        #         if (self._retries[node_hash] < self._max_retries):
-        #             self._retries[node_hash] += 1
-        #             self._handle_request_remotely(self._message, node_hash)
-        #         else:
-        #             self.complete = True
-        #             pass
-        #             # self._server._handle_unannounced_failure(node_hash)
-        #     else:
-        #         self._coordinator_listener.send(reply)

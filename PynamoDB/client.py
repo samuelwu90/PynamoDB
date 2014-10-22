@@ -43,7 +43,7 @@ class PynamoClient(asynchat.async_chat):
         self.close_when_done()
 
     def handle_error(self):
-        print sys.exc_info()
+        self.logger.error( sys.exc_info() )
 
     def send_message(self, message):
         self.logger.debug('send_message')
