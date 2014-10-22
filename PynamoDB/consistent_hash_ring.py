@@ -6,7 +6,7 @@ class ConsistentHashRing(object):
     Implements a consistent hash ring.
     ----------
         -given a list of nodes, determines the n nodes responsible for holding a given key.
-        -t is assumed that nodes and keys have been hashed appropriately prior to interaction with hash ring.
+        -it's assumed that nodes and keys have been hashed appropriately prior to interaction with hash ring.
     """
 
     def __init__(self, node_hashes=None, num_replicas=3):
@@ -30,6 +30,11 @@ class ConsistentHashRing(object):
     def __len__(self):
         """ Returns the number of nodes still in hash ring"""
         return len(self._hash_ring)
+
+    @property
+    def hash_ring(self):
+        """ returns the list of node hashes in the ring"""
+        return self._hash_ring
 
     def add_node_hash(self, node_hash=None):
         """
@@ -66,11 +71,6 @@ class ConsistentHashRing(object):
             except ValueError:
                 return False
 
-    @property
-    def hash_ring(self):
-        """ returns the list of node hashes in the ring"""
-        return self._hash_ring
-
     def get_responsible_node_hashes(self, key_hash=None):
         """
         returns the node hashes of the nodes responsible for storing a given key_hash.
@@ -83,14 +83,15 @@ class ConsistentHashRing(object):
 
         Returns:
         ----------
-        n nodes clockwise of given key hash where n = num_replicas
+        if there are >= n nodes left in the hash ring, list of n nodes clockwise of given key hash where n = num_replicas
+        if there are <n nodes left in the hash ring, however many nodes are left
+        empty list otherwise
 
         Example:
         ----------
         for node_hashes [ 'A', 'B', 'C', 'D' ] and key_hash 'AA', [ 'B', 'C', 'D' ] would be returned.
 
         """
-        self.logger.debug('get_responsible_node_hashes')
         self.logger.debug('get_responsible_node_hashes.  key_hash, num_replicas: {}, {}'.format(key_hash, self.num_replicas))
 
         if self.hash_ring and key_hash:
