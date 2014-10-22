@@ -11,6 +11,7 @@ But if you'd like to run a simulation of rolling failures as of now, you'll have
 0. install [Fabric]:(http://www.fabfile.org/) for easier multi-node deployment.
 0. run test_remote.test_rolling_failure_unannounced_termination.
 
-###To-do:
+To-do:
+========
 0. clean up the fabfile.
 0. package up project for pip.
