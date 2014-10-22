@@ -22,6 +22,8 @@ env.hosts = [instance.public_dns_name for reservation in conn.get_all_reservatio
 
 def _deploy_ec2(local_dir):
     """
+    Copies directory to each node.
+
     Steps:
         - syncs local_dir with all hosts in env.hosts
     """
@@ -37,6 +39,9 @@ def _runbg(cmd, sockname="dtach"):
 @runs_once
 def launch(n, output_file="node_list.txt", region="us-west-1", external_port=50000, internal_port=50001):
     """
+
+    Launch nodes until there are n running instances.
+
     Steps:
         - connect to AWS
         - count number of instances already up
@@ -80,9 +85,11 @@ def launch(n, output_file="node_list.txt", region="us-west-1", external_port=500
 @runs_once
 def reboot(region="us-west-1"):
     """
+    Reboots nodes.
+
     Steps:
-        - connect to AWS
-        - reboot each node in specified
+        - connects to AWS
+        - reboot each node
     """
     conn = boto.ec2.connect_to_region(region)
 
@@ -90,21 +97,33 @@ def reboot(region="us-west-1"):
         print reservation.instances[0].reboot()
 
 def disable_firewall():
+    """
+    Disable firewall entirely.
+    """
     sudo("ufw disable")
 
 def modify_firewall():
+    """
+    Modifies firewalls to allow access to ports 50000 and 50001.
+    """
     sudo("ufw allow 50000")
     sudo("ufw allow 50001")
 
 def terminate_python():
+    """
+    Terminates all python processes.
+    """
     sudo("ps aux | grep python | grep -v 'grep python' | awk '{print $2}' | xargs kill -9")
 
 def dependencies():
+    """
+    Installs all dependencies on each node.
+    """
     sudo("apt-get install dtach")
 
 def deploy():
     """
-    Idempotent Deploy.
+    Idempotent deploy.  Syncs directory with nodes.
 
     Steps:
         - mkdir ~/tmp remotely
@@ -113,8 +132,10 @@ def deploy():
     run('mkdir -p ~/tmp')
     _deploy_ec2('~/git/PynamoDB')
 
-
 def start():
+    """
+    Starts servers on each node.
+    """
     run("rm -rf ~/tmp/PynamoDB/logs")
     run("mkdir -p ~/tmp/PynamoDB/logs")
     run("rm -f *.log")
@@ -123,9 +144,11 @@ def start():
     run("chmod u+x {}".format(server))
     node_list="~/tmp/PynamoDB/scripts/node_list.txt"
     public_dns_name = env.host_string
-    print public_dns_name
     wait_time= 300
     _runbg("sudo python {} -i {} -d {} -w {}".format(server, node_list, public_dns_name, wait_time))
 
 def log():
+    """
+    Display logs from each server.
+    """
     run("cat pynamo.log")
